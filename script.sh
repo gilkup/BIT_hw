@@ -1,6 +1,6 @@
 #!/bin/bash
 
-rm  obj-intel64/ex2.so
+rm  obj-intel64/ex3.so
 mkdir obj-intel64
 rm -f rtn-output.txt
 
@@ -8,4 +8,4 @@ rm -f rtn-output.txt
 make 
 #cp given_files/clean/input.txt given_files/
 #rm given_files/input.txt.bz2
-../../../pin -t obj-intel64/ex2.so --  given_files/bzip2 -k -f given_files/input.txt
+../../../pin -t obj-intel64/ex3.so --  given_files/bzip2 -k -f given_files/input.txt
