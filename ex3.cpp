@@ -386,11 +386,9 @@ namespace rtntran {
 		int new_targ_entry;
 	} instr_map_t;
 
-
 	instr_map_t *instr_map = NULL;
 	int num_of_instr_map_entries = 0;
 	int max_ins_count = 0;
-
 
 	// total number of routines in the main executable module:
 	int max_rtn_count = 0;
@@ -560,13 +558,11 @@ namespace rtntran {
 	/* Translation routines                                         */
 	/* ============================================================= */
 
-
 	/*************************/
 	/* add_new_instr_entry() */
 	/*************************/
 	int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, unsigned int size)
 	{
-
 		// copy orig instr to instr map:
 		ADDRINT orig_targ_addr = 0;
 
@@ -596,7 +592,6 @@ namespace rtntran {
 		}
 
 		// add a new entry in the instr_map:
-
 		instr_map[num_of_instr_map_entries].orig_ins_addr = pc;
 		instr_map[num_of_instr_map_entries].new_ins_addr = (ADDRINT)&tc[tc_cursor];  // set an initial estimated addr in tc
 		instr_map[num_of_instr_map_entries].orig_targ_addr = orig_targ_addr;
@@ -626,24 +621,18 @@ namespace rtntran {
 		return new_size;
 	}
 
-
 	/*************************************************/
 	/* chain_all_direct_br_and_call_target_entries() */
 	/*************************************************/
 	int chain_all_direct_br_and_call_target_entries()
 	{
 		for (int i=0; i < num_of_instr_map_entries; i++) {
-
-			if (instr_map[i].orig_targ_addr == 0)
-				continue;
-
-			if (instr_map[i].hasNewTargAddr)
-				continue;
+			if (instr_map[i].orig_targ_addr == 0) continue;
+			if (instr_map[i].hasNewTargAddr) continue;
 
 			for (int j = 0; j < num_of_instr_map_entries; j++) {
 
-				if (j == i)
-				   continue;
+				if (j == i) continue;
 
 				if (instr_map[j].orig_ins_addr == instr_map[i].orig_targ_addr) {
 					instr_map[i].hasNewTargAddr = true;
@@ -652,10 +641,8 @@ namespace rtntran {
 				}
 			}
 		}
-
 		return 0;
 	}
-
 
 	/**************************/
 	/* fix_rip_displacement() */
@@ -683,8 +670,8 @@ namespace rtntran {
 		bool isRipBase = false;
 		xed_reg_enum_t base_reg = XED_REG_INVALID;
 		xed_int64_t disp = 0;
-		for(unsigned int i=0; i < memops ; i++)   {
 
+		for(unsigned int i=0; i < memops ; i++) {
 			base_reg = xed_decoded_inst_get_base_reg(&xedd,i);
 			disp = xed_decoded_inst_get_memory_displacement(&xedd,i);
 
@@ -692,12 +679,10 @@ namespace rtntran {
 				isRipBase = true;
 				break;
 			}
-
 		}
 
 		if (!isRipBase)
 			return 0;
-
 
 		//xed_uint_t disp_byts = xed_decoded_inst_get_memory_displacement_width(xedd,i); // how many byts in disp ( disp length in byts - for example FFFFFFFF = 4
 		xed_int64_t new_disp = 0;
@@ -735,13 +720,11 @@ namespace rtntran {
 		return new_size;
 	}
 
-
 	/************************************/
 	/* fix_direct_br_call_to_orig_addr */
 	/************************************/
 	int fix_direct_br_call_to_orig_addr(int instr_map_entry)
 	{
-
 		xed_decoded_inst_t xedd;
 		xed_decoded_inst_zero_set_mode(&xedd,&dstate);
 
@@ -799,7 +782,6 @@ namespace rtntran {
 			return -1;
 		}
 
-
 		xed_error_enum_t xed_error = xed_encode(&enc_req, reinterpret_cast<UINT8*>(instr_map[instr_map_entry].encoded_ins), ilen, &olen);
 		if (xed_error != XED_ERROR_NONE) {
 			cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
@@ -853,13 +835,11 @@ namespace rtntran {
 		return olen;
 	}
 
-
 	/***********************************/
 	/* fix_direct_br_call_displacement */
 	/***********************************/
 	int fix_direct_br_call_displacement(int instr_map_entry)
 	{
-
 		xed_decoded_inst_t xedd;
 		xed_decoded_inst_zero_set_mode(&xedd,&dstate);
 
@@ -872,7 +852,6 @@ namespace rtntran {
 		xed_int32_t  new_disp = 0;
 		unsigned int size = XED_MAX_INSTRUCTION_BYTES;
 		unsigned int new_size = 0;
-
 
 		xed_category_enum_t category_enum = xed_decoded_inst_get_category(&xedd);
 
@@ -952,7 +931,6 @@ namespace rtntran {
 		return new_size;
 	}
 
-
 	/************************************/
 	/* fix_instructions_displacements() */
 	/************************************/
@@ -963,7 +941,6 @@ namespace rtntran {
 		int size_diff = 0;
 
 		do {
-
 			size_diff = 0;
 
 			if (KnobVerbose) {
@@ -971,7 +948,6 @@ namespace rtntran {
 			}
 
 			for (int i=0; i < num_of_instr_map_entries; i++) {
-
 				instr_map[i].new_ins_addr += size_diff;
 
 				int rc = 0;
@@ -996,7 +972,6 @@ namespace rtntran {
 					continue;  // not a direct branch or a direct call instr.
 				}
 
-
 				// fix instr displacement:
 				rc = fix_direct_br_call_displacement(i);
 				if (rc < 0)
@@ -1006,14 +981,11 @@ namespace rtntran {
 				   size_diff += (rc - instr_map[i].size);
 				   instr_map[i].size = (unsigned int)rc;
 				}
-
 			}  // end int i=0; i ..
-
 		} while (size_diff != 0);
 
 	   return 0;
-	 }
-
+	}
 
 	/*****************************************/
 	/* find_candidate_rtns_for_translation() */
@@ -1023,7 +995,6 @@ namespace rtntran {
 		int rc;
 
 		// go over routines and check if they are candidates for translation and mark them for translation:
-
 		for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec))
 		{
 			if (!SEC_IsExecutable(sec) || SEC_IsWriteable(sec) || !SEC_Address(sec))
@@ -1031,7 +1002,6 @@ namespace rtntran {
 
 			for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn))
 			{
-
 				if (rtn == RTN_Invalid()) {
 				  cerr << "Warning: invalid routine " << RTN_Name(rtn) << endl;
 				  continue;
@@ -1046,7 +1016,6 @@ namespace rtntran {
 				RTN_Open( rtn );
 
 				for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
-
 					//debug print of orig instruction:
 					if (KnobVerbose) {
 						cerr << "old instr: ";
@@ -1077,25 +1046,20 @@ namespace rtntran {
 					}
 				} // end for INS...
 
-
 				// debug print of routine name:
 				if (KnobVerbose) {
 					cerr <<   "rtn name: " << RTN_Name(rtn) << " : " << dec << translated_rtn_num << endl;
 				}
 
-
 				// Close the RTN.
 				RTN_Close( rtn );
 
 				translated_rtn_num++;
-
 			 } // end for RTN..
 		} // end for SEC...
 
-
 		return 0;
 	}
-
 
 	/***************************/
 	/* int copy_instrs_to_tc() */
@@ -1103,22 +1067,18 @@ namespace rtntran {
 	int copy_instrs_to_tc()
 	{
 		int cursor = 0;
-
 		for (int i=0; i < num_of_instr_map_entries; i++) {
-
 		  if ((ADDRINT)&tc[cursor] != instr_map[i].new_ins_addr) {
 			  cerr << "ERROR: Non-matching instruction addresses: " << hex << (ADDRINT)&tc[cursor] << " vs. " << instr_map[i].new_ins_addr << endl;
 			  return -1;
 		  }
 
 		  memcpy(&tc[cursor], &instr_map[i].encoded_ins, instr_map[i].size);
-
 		  cursor += instr_map[i].size;
 		}
 
 		return 0;
 	}
-
 
 	/*************************************/
 	/* void commit_translated_routines() */
@@ -1127,15 +1087,10 @@ namespace rtntran {
 	{
 		// Commit the translated functions:
 		// Go over the candidate functions and replace the original ones by their new successfully translated ones:
-
 		for (int i=0; i < translated_rtn_num; i++) {
-
 			//replace function by new function in tc
-
 			if (translated_rtn[i].instr_map_entry >= 0) {
-
 				if (translated_rtn[i].rtn_size > MAX_PROBE_JUMP_INSTR_BYTES && translated_rtn[i].isSafeForReplacedProbe) {
-
 					RTN rtn = RTN_FindByAddress(translated_rtn[i].rtn_addr);
 
 					//debug print:
@@ -1145,7 +1100,6 @@ namespace rtntran {
 						cerr << "committing rtN: " << RTN_Name(rtn);
 					}
 					cerr << " from: 0x" << hex << RTN_Address(rtn) << " to: 0x" << hex << instr_map[translated_rtn[i].instr_map_entry].new_ins_addr << endl;
-
 
 					if (RTN_IsSafeForProbedReplacement(rtn)) {
 
@@ -1158,7 +1112,6 @@ namespace rtntran {
 						}
 						cerr << " orig routine addr: 0x" << hex << translated_rtn[i].rtn_addr
 								<< " replacement routine addr: 0x" << hex << instr_map[translated_rtn[i].instr_map_entry].new_ins_addr << endl;
-
 #if 0
 						dump_instr_from_mem ((ADDRINT *)translated_rtn[i].rtn_addr, translated_rtn[i].rtn_addr);
 #endif
@@ -1167,7 +1120,6 @@ namespace rtntran {
 			}
 		}
 	}
-
 
 	/****************************/
 	/* allocate_and_init_memory */
@@ -1181,7 +1133,6 @@ namespace rtntran {
 			if (!SEC_IsExecutable(sec) || SEC_IsWriteable(sec) || !SEC_Address(sec))
 				continue;
 
-
 			if (!lowest_sec_addr || lowest_sec_addr > SEC_Address(sec))
 				lowest_sec_addr = SEC_Address(sec);
 
@@ -1191,9 +1142,7 @@ namespace rtntran {
 			// need to avouid using RTN_Open as it is expensive...
 			for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn))
 			{
-
-				if (rtn == RTN_Invalid())
-					continue;
+				if (rtn == RTN_Invalid()) continue;
 
 				max_ins_count += RTN_NumIns  (rtn);
 				max_rtn_count++;
@@ -1209,7 +1158,6 @@ namespace rtntran {
 			return -1;
 		}
 
-
 		// Allocate memory for the array of candidate routines containing inlineable function calls:
 		// Need to estimate size of inlined routines.. ???
 		translated_rtn = (translated_rtn_t *)calloc(max_rtn_count, sizeof(translated_rtn_t));
@@ -1217,7 +1165,6 @@ namespace rtntran {
 			perror("calloc");
 			return -1;
 		}
-
 
 		// get a page size in the system:
 		int pagesize = sysconf(_SC_PAGE_SIZE);
@@ -1241,8 +1188,6 @@ namespace rtntran {
 		return 0;
 	}
 
-
-
 	/* ============================================ */
 	/* Main translation routine                     */
 	/* ============================================ */
@@ -1250,7 +1195,6 @@ namespace rtntran {
 	{
 		// debug print of all images' instructions
 		//dump_all_image_instrs(img);
-
 
 		// Step 0: Check the image and the CPU:
 		if (!IMG_IsMainExecutable(img))
@@ -1264,7 +1208,6 @@ namespace rtntran {
 			return;
 
 		cout << "after memory allocation" << endl;
-
 
 		// Step 2: go over all routines and identify candidate routines and copy their code into the instr map IR:
 		rc = find_candidate_rtns_for_translation(img);
@@ -1344,4 +1287,3 @@ int main(int argc, char *argv[])
 
 	return 0;
 }
-
