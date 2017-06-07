@@ -351,28 +351,28 @@ namespace rtntran {
 	/* ===================================================================== */
 	/* Global Variables */
 	/* ===================================================================== */
-	std::ofstream* out = 0;
+	std::ofstream* g_out = 0;
 
 	// For XED:
 	#if defined(TARGET_IA32E)
-		xed_state_t dstate = {XED_MACHINE_MODE_LONG_64, XED_ADDRESS_WIDTH_64b};
+		xed_state_t g_dstate = {XED_MACHINE_MODE_LONG_64, XED_ADDRESS_WIDTH_64b};
 	#else
-		xed_state_t dstate = { XED_MACHINE_MODE_LEGACY_32, XED_ADDRESS_WIDTH_32b};
+		xed_state_t g_dstate = { XED_MACHINE_MODE_LEGACY_32, XED_ADDRESS_WIDTH_32b};
 	#endif
 
 	//For XED: Pass in the proper length: 15 is the max. But if you do not want to
 	//cross pages, you can pass less than 15 bytes, of course, the
 	//instruction might not decode if not enough bytes are provided.
-	const unsigned int max_inst_len = XED_MAX_INSTRUCTION_BYTES;
+	const unsigned int g_max_inst_len = XED_MAX_INSTRUCTION_BYTES;
 
-	ADDRINT lowest_sec_addr = 0;
-	ADDRINT highest_sec_addr = 0;
+	ADDRINT g_lowest_sec_addr = 0;
+	ADDRINT g_highest_sec_addr = 0;
 
 	#define MAX_PROBE_JUMP_INSTR_BYTES  14
 
 	// tc containing the new code:
-	char *tc;
-	int tc_cursor = 0;
+	char *g_tc;
+	int g_tc_cursor = 0;
 
 	// instruction map with an entry for each new instruction:
 	typedef struct {
@@ -386,12 +386,12 @@ namespace rtntran {
 		int new_targ_entry;
 	} instr_map_t;
 
-	instr_map_t *instr_map = NULL;
-	int num_of_instr_map_entries = 0;
-	int max_ins_count = 0;
+	instr_map_t *g_instr_map = NULL;
+	int g_num_of_instr_map_entries = 0;
+	int g_max_ins_count = 0;
 
 	// total number of routines in the main executable module:
-	int max_rtn_count = 0;
+	int g_max_rtn_count = 0;
 
 	// Tables of all candidate routines to be translated:
 	typedef struct {
@@ -401,8 +401,8 @@ namespace rtntran {
 		bool isSafeForReplacedProbe;
 	} translated_rtn_t;
 
-	translated_rtn_t *translated_rtn;
-	int translated_rtn_num = 0;
+	translated_rtn_t *g_translated_rtn;
+	int g_translated_rtn_num = 0;
 
 #if 0
 	/* ============================================================= */
@@ -460,9 +460,9 @@ namespace rtntran {
 	  char disasm_buf[2048];
 	  xed_decoded_inst_t new_xedd;
 
-	  xed_decoded_inst_zero_set_mode(&new_xedd,&dstate);
+	  xed_decoded_inst_zero_set_mode(&new_xedd,&g_dstate);
 
-	  xed_error_enum_t xed_code = xed_decode(&new_xedd, reinterpret_cast<UINT8*>(address), max_inst_len);
+	  xed_error_enum_t xed_code = xed_decode(&new_xedd, reinterpret_cast<UINT8*>(address), g_max_inst_len);
 
 	  BOOL xed_ok = (xed_code == XED_ERROR_NONE);
 	  if (!xed_ok){
@@ -482,11 +482,11 @@ namespace rtntran {
 	/****************************/
 	void dump_entire_instr_map()
 	{
-		for (int i=0; i < num_of_instr_map_entries; i++) {
-			for (int j=0; j < translated_rtn_num; j++) {
-				if (translated_rtn[j].instr_map_entry == i) {
+		for (int i=0; i < g_num_of_instr_map_entries; i++) {
+			for (int j=0; j < g_translated_rtn_num; j++) {
+				if (g_translated_rtn[j].instr_map_entry == i) {
 
-					RTN rtn = RTN_FindByAddress(translated_rtn[j].rtn_addr);
+					RTN rtn = RTN_FindByAddress(g_translated_rtn[j].rtn_addr);
 
 					if (rtn == RTN_Invalid()) {
 						cerr << "Unknwon"  << ":" << endl;
@@ -495,7 +495,7 @@ namespace rtntran {
 					}
 				}
 			}
-			dump_instr_from_mem ((ADDRINT *)instr_map[i].new_ins_addr, instr_map[i].new_ins_addr);
+			dump_instr_from_mem ((ADDRINT *)g_instr_map[i].new_ins_addr, g_instr_map[i].new_ins_addr);
 		}
 	}
 
@@ -506,19 +506,19 @@ namespace rtntran {
 	void dump_instr_map_entry(int instr_map_entry)
 	{
 		cerr << dec << instr_map_entry << ": ";
-		cerr << " orig_ins_addr: " << hex << instr_map[instr_map_entry].orig_ins_addr;
-		cerr << " new_ins_addr: " << hex << instr_map[instr_map_entry].new_ins_addr;
-		cerr << " orig_targ_addr: " << hex << instr_map[instr_map_entry].orig_targ_addr;
+		cerr << " orig_ins_addr: " << hex << g_instr_map[instr_map_entry].orig_ins_addr;
+		cerr << " new_ins_addr: " << hex << g_instr_map[instr_map_entry].new_ins_addr;
+		cerr << " orig_targ_addr: " << hex << g_instr_map[instr_map_entry].orig_targ_addr;
 
 		ADDRINT new_targ_addr;
-		if (instr_map[instr_map_entry].new_targ_entry >= 0)
-			new_targ_addr = instr_map[instr_map[instr_map_entry].new_targ_entry].new_ins_addr;
+		if (g_instr_map[instr_map_entry].new_targ_entry >= 0)
+			new_targ_addr = g_instr_map[g_instr_map[instr_map_entry].new_targ_entry].new_ins_addr;
 		else
-			new_targ_addr = instr_map[instr_map_entry].orig_targ_addr;
+			new_targ_addr = g_instr_map[instr_map_entry].orig_targ_addr;
 
 		cerr << " new_targ_addr: " << hex << new_targ_addr;
 		cerr << "    new instr:";
-		dump_instr_from_mem((ADDRINT *)instr_map[instr_map_entry].encoded_ins, instr_map[instr_map_entry].new_ins_addr);
+		dump_instr_from_mem((ADDRINT *)g_instr_map[instr_map_entry].encoded_ins, g_instr_map[instr_map_entry].new_ins_addr);
 	}
 
 	/*************/
@@ -528,16 +528,16 @@ namespace rtntran {
 	{
 	  char disasm_buf[2048];
 	  xed_decoded_inst_t new_xedd;
-	  ADDRINT address = (ADDRINT)&tc[0];
+	  ADDRINT address = (ADDRINT)&g_tc[0];
 	  unsigned int size = 0;
 
-	  while (address < (ADDRINT)&tc[tc_cursor]) {
+	  while (address < (ADDRINT)&g_tc[g_tc_cursor]) {
 
 		  address += size;
 
-		  xed_decoded_inst_zero_set_mode(&new_xedd,&dstate);
+		  xed_decoded_inst_zero_set_mode(&new_xedd,&g_dstate);
 
-		  xed_error_enum_t xed_code = xed_decode(&new_xedd, reinterpret_cast<UINT8*>(address), max_inst_len);
+		  xed_error_enum_t xed_code = xed_decode(&new_xedd, reinterpret_cast<UINT8*>(address), g_max_inst_len);
 
 		  BOOL xed_ok = (xed_code == XED_ERROR_NONE);
 		  if (!xed_ok){
@@ -585,27 +585,27 @@ namespace rtntran {
 
 		unsigned int new_size = 0;
 
-		xed_error_enum_t xed_error = xed_encode (xedd, reinterpret_cast<UINT8*>(instr_map[num_of_instr_map_entries].encoded_ins), max_inst_len , &new_size);
+		xed_error_enum_t xed_error = xed_encode (xedd, reinterpret_cast<UINT8*>(g_instr_map[g_num_of_instr_map_entries].encoded_ins), g_max_inst_len , &new_size);
 		if (xed_error != XED_ERROR_NONE) {
 			cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
 			return -1;
 		}
 
 		// add a new entry in the instr_map:
-		instr_map[num_of_instr_map_entries].orig_ins_addr = pc;
-		instr_map[num_of_instr_map_entries].new_ins_addr = (ADDRINT)&tc[tc_cursor];  // set an initial estimated addr in tc
-		instr_map[num_of_instr_map_entries].orig_targ_addr = orig_targ_addr;
-		instr_map[num_of_instr_map_entries].hasNewTargAddr = false;
-		instr_map[num_of_instr_map_entries].new_targ_entry = -1;
-		instr_map[num_of_instr_map_entries].size = new_size;
-		instr_map[num_of_instr_map_entries].category_enum = xed_decoded_inst_get_category(xedd);
+		g_instr_map[g_num_of_instr_map_entries].orig_ins_addr = pc;
+		g_instr_map[g_num_of_instr_map_entries].new_ins_addr = (ADDRINT)&g_tc[g_tc_cursor];  // set an initial estimated addr in tc
+		g_instr_map[g_num_of_instr_map_entries].orig_targ_addr = orig_targ_addr;
+		g_instr_map[g_num_of_instr_map_entries].hasNewTargAddr = false;
+		g_instr_map[g_num_of_instr_map_entries].new_targ_entry = -1;
+		g_instr_map[g_num_of_instr_map_entries].size = new_size;
+		g_instr_map[g_num_of_instr_map_entries].category_enum = xed_decoded_inst_get_category(xedd);
 
-		num_of_instr_map_entries++;
+		g_num_of_instr_map_entries++;
 
 		// update expected size of tc:
-		tc_cursor += new_size;
+		g_tc_cursor += new_size;
 
-		if (num_of_instr_map_entries >= max_ins_count) {
+		if (g_num_of_instr_map_entries >= g_max_ins_count) {
 			cerr << "out of memory for map_instr" << endl;
 			return -1;
 		}
@@ -614,7 +614,7 @@ namespace rtntran {
 		// debug print new encoded instr:
 		if (KnobVerbose) {
 			cerr << "    new instr:";
-			dump_instr_from_mem((ADDRINT *)instr_map[num_of_instr_map_entries-1].encoded_ins, instr_map[num_of_instr_map_entries-1].new_ins_addr);
+			dump_instr_from_mem((ADDRINT *)g_instr_map[g_num_of_instr_map_entries-1].encoded_ins, g_instr_map[g_num_of_instr_map_entries-1].new_ins_addr);
 		}
 #endif
 
@@ -626,17 +626,17 @@ namespace rtntran {
 	/*************************************************/
 	int chain_all_direct_br_and_call_target_entries()
 	{
-		for (int i=0; i < num_of_instr_map_entries; i++) {
-			if (instr_map[i].orig_targ_addr == 0) continue;
-			if (instr_map[i].hasNewTargAddr) continue;
+		for (int i=0; i < g_num_of_instr_map_entries; i++) {
+			if (g_instr_map[i].orig_targ_addr == 0) continue;
+			if (g_instr_map[i].hasNewTargAddr) continue;
 
-			for (int j = 0; j < num_of_instr_map_entries; j++) {
+			for (int j = 0; j < g_num_of_instr_map_entries; j++) {
 
 				if (j == i) continue;
 
-				if (instr_map[j].orig_ins_addr == instr_map[i].orig_targ_addr) {
-					instr_map[i].hasNewTargAddr = true;
-					instr_map[i].new_targ_entry = j;
+				if (g_instr_map[j].orig_ins_addr == g_instr_map[i].orig_targ_addr) {
+					g_instr_map[i].hasNewTargAddr = true;
+					g_instr_map[i].new_targ_entry = j;
 					break;
 				}
 			}
@@ -653,17 +653,17 @@ namespace rtntran {
 		//dump_instr_map_entry(instr_map_entry);
 
 		xed_decoded_inst_t xedd;
-		xed_decoded_inst_zero_set_mode(&xedd,&dstate);
+		xed_decoded_inst_zero_set_mode(&xedd,&g_dstate);
 
-		xed_error_enum_t xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(instr_map[instr_map_entry].encoded_ins), max_inst_len);
+		xed_error_enum_t xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(g_instr_map[instr_map_entry].encoded_ins), g_max_inst_len);
 		if (xed_code != XED_ERROR_NONE) {
-			cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << instr_map[instr_map_entry].new_ins_addr << endl;
+			cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << g_instr_map[instr_map_entry].new_ins_addr << endl;
 			return -1;
 		}
 
 		unsigned int memops = xed_decoded_inst_number_of_memory_operands(&xedd);
 
-		if (instr_map[instr_map_entry].orig_targ_addr != 0)  // a direct jmp or call instruction.
+		if (g_instr_map[instr_map_entry].orig_targ_addr != 0)  // a direct jmp or call instruction.
 			return 0;
 
 		//cerr << "Memory Operands" << endl;
@@ -691,7 +691,7 @@ namespace rtntran {
 		unsigned int orig_size = xed_decoded_inst_get_length (&xedd);
 
 		// modify rip displacement. use direct addressing mode:
-		new_disp = instr_map[instr_map_entry].orig_ins_addr + disp + orig_size; // xed_decoded_inst_get_length (&xedd_orig);
+		new_disp = g_instr_map[instr_map_entry].orig_ins_addr + disp + orig_size; // xed_decoded_inst_get_length (&xedd_orig);
 		xed_encoder_request_set_base0 (&xedd, XED_REG_INVALID);
 
 		//Set the memory displacement using a bit length
@@ -703,7 +703,7 @@ namespace rtntran {
 		// Converts the decoder request to a valid encoder request:
 		xed_encoder_request_init_from_decode (&xedd);
 
-		xed_error_enum_t xed_error = xed_encode (&xedd, reinterpret_cast<UINT8*>(instr_map[instr_map_entry].encoded_ins), size , &new_size); // &instr_map[i].size
+		xed_error_enum_t xed_error = xed_encode (&xedd, reinterpret_cast<UINT8*>(g_instr_map[instr_map_entry].encoded_ins), size , &new_size); // &g_instr_map[i].size
 		if (xed_error != XED_ERROR_NONE) {
 			cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
 #if 0
@@ -726,11 +726,11 @@ namespace rtntran {
 	int fix_direct_br_call_to_orig_addr(int instr_map_entry)
 	{
 		xed_decoded_inst_t xedd;
-		xed_decoded_inst_zero_set_mode(&xedd,&dstate);
+		xed_decoded_inst_zero_set_mode(&xedd,&g_dstate);
 
-		xed_error_enum_t xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(instr_map[instr_map_entry].encoded_ins), max_inst_len);
+		xed_error_enum_t xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(g_instr_map[instr_map_entry].encoded_ins), g_max_inst_len);
 		if (xed_code != XED_ERROR_NONE) {
-			cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << instr_map[instr_map_entry].new_ins_addr << endl;
+			cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << g_instr_map[instr_map_entry].new_ins_addr << endl;
 			return -1;
 		}
 
@@ -739,7 +739,7 @@ namespace rtntran {
 		if (category_enum != XED_CATEGORY_CALL && category_enum != XED_CATEGORY_UNCOND_BR) {
 
 			cerr << "ERROR: Invalid direct jump from translated code to original code in rotuine: "
-				  << RTN_Name(RTN_FindByAddress(instr_map[instr_map_entry].orig_ins_addr)) << endl;
+				  << RTN_Name(RTN_FindByAddress(g_instr_map[instr_map_entry].orig_ins_addr)) << endl;
 #if 0
 			dump_instr_map_entry(instr_map_entry);
 #endif
@@ -747,7 +747,7 @@ namespace rtntran {
 		}
 
 		// check for cases of direct jumps/calls back to the orginal target address:
-		if (instr_map[instr_map_entry].new_targ_entry >= 0) {
+		if (g_instr_map[instr_map_entry].new_targ_entry >= 0) {
 			cerr << "ERROR: Invalid jump or call instruction" << endl;
 			return -1;
 		}
@@ -758,31 +758,31 @@ namespace rtntran {
 
 		xed_encoder_instruction_t  enc_instr;
 
-		ADDRINT new_disp = (ADDRINT)&instr_map[instr_map_entry].orig_targ_addr -
-						   instr_map[instr_map_entry].new_ins_addr -
+		ADDRINT new_disp = (ADDRINT)&g_instr_map[instr_map_entry].orig_targ_addr -
+						   g_instr_map[instr_map_entry].new_ins_addr -
 						   xed_decoded_inst_get_length (&xedd);
 
 		if (category_enum == XED_CATEGORY_CALL)
-				xed_inst1(&enc_instr, dstate,
+				xed_inst1(&enc_instr, g_dstate,
 				XED_ICLASS_CALL_NEAR, 64,
 				xed_mem_bd (XED_REG_RIP, xed_disp(new_disp, 32), 64));
 
 		if (category_enum == XED_CATEGORY_UNCOND_BR)
-				xed_inst1(&enc_instr, dstate,
+				xed_inst1(&enc_instr, g_dstate,
 				XED_ICLASS_JMP, 64,
 				xed_mem_bd (XED_REG_RIP, xed_disp(new_disp, 32), 64));
 
 
 		xed_encoder_request_t enc_req;
 
-		xed_encoder_request_zero_set_mode(&enc_req, &dstate);
+		xed_encoder_request_zero_set_mode(&enc_req, &g_dstate);
 		xed_bool_t convert_ok = xed_convert_to_encoder_request(&enc_req, &enc_instr);
 		if (!convert_ok) {
 			cerr << "conversion to encode request failed" << endl;
 			return -1;
 		}
 
-		xed_error_enum_t xed_error = xed_encode(&enc_req, reinterpret_cast<UINT8*>(instr_map[instr_map_entry].encoded_ins), ilen, &olen);
+		xed_error_enum_t xed_error = xed_encode(&enc_req, reinterpret_cast<UINT8*>(g_instr_map[instr_map_entry].encoded_ins), ilen, &olen);
 		if (xed_error != XED_ERROR_NONE) {
 			cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
 #if 0
@@ -794,28 +794,28 @@ namespace rtntran {
 		// handle the case where the original instr size is different from new encoded instr:
 		if (olen != xed_decoded_inst_get_length (&xedd)) {
 
-			new_disp = (ADDRINT)&instr_map[instr_map_entry].orig_targ_addr -
-					   instr_map[instr_map_entry].new_ins_addr - olen;
+			new_disp = (ADDRINT)&g_instr_map[instr_map_entry].orig_targ_addr -
+					   g_instr_map[instr_map_entry].new_ins_addr - olen;
 
 			if (category_enum == XED_CATEGORY_CALL)
-				xed_inst1(&enc_instr, dstate,
+				xed_inst1(&enc_instr, g_dstate,
 				XED_ICLASS_CALL_NEAR, 64,
 				xed_mem_bd (XED_REG_RIP, xed_disp(new_disp, 32), 64));
 
 			if (category_enum == XED_CATEGORY_UNCOND_BR)
-				xed_inst1(&enc_instr, dstate,
+				xed_inst1(&enc_instr, g_dstate,
 				XED_ICLASS_JMP, 64,
 				xed_mem_bd (XED_REG_RIP, xed_disp(new_disp, 32), 64));
 
 
-			xed_encoder_request_zero_set_mode(&enc_req, &dstate);
+			xed_encoder_request_zero_set_mode(&enc_req, &g_dstate);
 			xed_bool_t convert_ok = xed_convert_to_encoder_request(&enc_req, &enc_instr);
 			if (!convert_ok) {
 				cerr << "conversion to encode request failed" << endl;
 				return -1;
 			}
 
-			xed_error = xed_encode (&enc_req, reinterpret_cast<UINT8*>(instr_map[instr_map_entry].encoded_ins), ilen , &olen);
+			xed_error = xed_encode (&enc_req, reinterpret_cast<UINT8*>(g_instr_map[instr_map_entry].encoded_ins), ilen , &olen);
 			if (xed_error != XED_ERROR_NONE) {
 				cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
 #if 0
@@ -831,7 +831,7 @@ namespace rtntran {
 		}
 #endif
 
-		instr_map[instr_map_entry].hasNewTargAddr = true;
+		g_instr_map[instr_map_entry].hasNewTargAddr = true;
 		return olen;
 	}
 
@@ -841,11 +841,11 @@ namespace rtntran {
 	int fix_direct_br_call_displacement(int instr_map_entry)
 	{
 		xed_decoded_inst_t xedd;
-		xed_decoded_inst_zero_set_mode(&xedd,&dstate);
+		xed_decoded_inst_zero_set_mode(&xedd,&g_dstate);
 
-		xed_error_enum_t xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(instr_map[instr_map_entry].encoded_ins), max_inst_len);
+		xed_error_enum_t xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(g_instr_map[instr_map_entry].encoded_ins), g_max_inst_len);
 		if (xed_code != XED_ERROR_NONE) {
-			cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << instr_map[instr_map_entry].new_ins_addr << endl;
+			cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << g_instr_map[instr_map_entry].new_ins_addr << endl;
 			return -1;
 		}
 
@@ -861,15 +861,15 @@ namespace rtntran {
 		}
 
 		// fix branches/calls to original targ addresses:
-		if (instr_map[instr_map_entry].new_targ_entry < 0) {
+		if (g_instr_map[instr_map_entry].new_targ_entry < 0) {
 		   int rc = fix_direct_br_call_to_orig_addr(instr_map_entry);
 		   return rc;
 		}
 
 		ADDRINT new_targ_addr;
-		new_targ_addr = instr_map[instr_map[instr_map_entry].new_targ_entry].new_ins_addr;
+		new_targ_addr = g_instr_map[g_instr_map[instr_map_entry].new_targ_entry].new_ins_addr;
 
-		new_disp = (new_targ_addr - instr_map[instr_map_entry].new_ins_addr) - instr_map[instr_map_entry].size; // orig_size;
+		new_disp = (new_targ_addr - g_instr_map[instr_map_entry].new_ins_addr) - g_instr_map[instr_map_entry].size; // orig_size;
 
 		xed_uint_t   new_disp_byts = 4; // num_of_bytes(new_disp);  ???
 
@@ -899,20 +899,20 @@ namespace rtntran {
 			cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) <<  endl;
 			char buf[2048];
 #if 0
-			xed_decoded_inst_dump_intel_format(&xedd, buf, 2048, instr_map[instr_map_entry].orig_ins_addr);
+			xed_decoded_inst_dump_intel_format(&xedd, buf, 2048, g_instr_map[instr_map_entry].orig_ins_addr);
 #endif
-			cerr << " instr: " << "0x" << hex << instr_map[instr_map_entry].orig_ins_addr << " : " << buf <<  endl;
+			cerr << " instr: " << "0x" << hex << g_instr_map[instr_map_entry].orig_ins_addr << " : " << buf <<  endl;
 			return -1;
 		}
 
-		new_targ_addr = instr_map[instr_map[instr_map_entry].new_targ_entry].new_ins_addr;
+		new_targ_addr = g_instr_map[g_instr_map[instr_map_entry].new_targ_entry].new_ins_addr;
 
-		new_disp = new_targ_addr - (instr_map[instr_map_entry].new_ins_addr + new_size);  // this is the correct displacemnet.
+		new_disp = new_targ_addr - (g_instr_map[instr_map_entry].new_ins_addr + new_size);  // this is the correct displacemnet.
 
 		//Set the branch displacement:
 		xed_encoder_request_set_branch_displacement (&xedd, new_disp, new_disp_byts);
 
-		xed_error = xed_encode (&xedd, reinterpret_cast<UINT8*>(instr_map[instr_map_entry].encoded_ins), size , &new_size); // &instr_map[i].size
+		xed_error = xed_encode (&xedd, reinterpret_cast<UINT8*>(g_instr_map[instr_map_entry].encoded_ins), size , &new_size); // &g_instr_map[i].size
 		if (xed_error != XED_ERROR_NONE) {
 			cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
 #if 0
@@ -947,8 +947,8 @@ namespace rtntran {
 				cerr << "starting a pass of fixing instructions displacements: " << endl;
 			}
 
-			for (int i=0; i < num_of_instr_map_entries; i++) {
-				instr_map[i].new_ins_addr += size_diff;
+			for (int i=0; i < g_num_of_instr_map_entries; i++) {
+				g_instr_map[i].new_ins_addr += size_diff;
 
 				int rc = 0;
 
@@ -959,16 +959,16 @@ namespace rtntran {
 
 				if (rc > 0) { // this was a rip-based instruction which was fixed.
 
-					if (instr_map[i].size != (unsigned int)rc) {
-					   size_diff += (rc - instr_map[i].size);
-					   instr_map[i].size = (unsigned int)rc;
+					if (g_instr_map[i].size != (unsigned int)rc) {
+					   size_diff += (rc - g_instr_map[i].size);
+					   g_instr_map[i].size = (unsigned int)rc;
 					}
 
 					continue;
 				}
 
 				// check if it is a direct branch or a direct call instr:
-				if (instr_map[i].orig_targ_addr == 0) {
+				if (g_instr_map[i].orig_targ_addr == 0) {
 					continue;  // not a direct branch or a direct call instr.
 				}
 
@@ -977,9 +977,9 @@ namespace rtntran {
 				if (rc < 0)
 					return -1;
 
-				if (instr_map[i].size != (unsigned int)rc) {
-				   size_diff += (rc - instr_map[i].size);
-				   instr_map[i].size = (unsigned int)rc;
+				if (g_instr_map[i].size != (unsigned int)rc) {
+				   size_diff += (rc - g_instr_map[i].size);
+				   g_instr_map[i].size = (unsigned int)rc;
 				}
 			}  // end int i=0; i ..
 		} while (size_diff != 0);
@@ -1007,10 +1007,10 @@ namespace rtntran {
 				  continue;
 				}
 
-				translated_rtn[translated_rtn_num].rtn_addr = RTN_Address(rtn);
-				translated_rtn[translated_rtn_num].rtn_size = RTN_Size(rtn);
-				translated_rtn[translated_rtn_num].instr_map_entry = num_of_instr_map_entries;
-				translated_rtn[translated_rtn_num].isSafeForReplacedProbe = true;
+				g_translated_rtn[g_translated_rtn_num].rtn_addr = RTN_Address(rtn);
+				g_translated_rtn[g_translated_rtn_num].rtn_size = RTN_Size(rtn);
+				g_translated_rtn[g_translated_rtn_num].instr_map_entry = g_num_of_instr_map_entries;
+				g_translated_rtn[g_translated_rtn_num].isSafeForReplacedProbe = true;
 
 				// Open the RTN.
 				RTN_Open( rtn );
@@ -1028,12 +1028,12 @@ namespace rtntran {
 					xed_decoded_inst_t xedd;
 					xed_error_enum_t xed_code;
 
-					xed_decoded_inst_zero_set_mode(&xedd,&dstate);
+					xed_decoded_inst_zero_set_mode(&xedd,&g_dstate);
 
-					xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(addr), max_inst_len);
+					xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(addr), g_max_inst_len);
 					if (xed_code != XED_ERROR_NONE) {
 						cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
-						translated_rtn[translated_rtn_num].instr_map_entry = -1;
+						g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
 						break;
 					}
 
@@ -1041,20 +1041,20 @@ namespace rtntran {
 					rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins));
 					if (rc < 0) {
 						cerr << "ERROR: failed during instructon translation." << endl;
-						translated_rtn[translated_rtn_num].instr_map_entry = -1;
+						g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
 						break;
 					}
 				} // end for INS...
 
 				// debug print of routine name:
 				if (KnobVerbose) {
-					cerr <<   "rtn name: " << RTN_Name(rtn) << " : " << dec << translated_rtn_num << endl;
+					cerr <<   "rtn name: " << RTN_Name(rtn) << " : " << dec << g_translated_rtn_num << endl;
 				}
 
 				// Close the RTN.
 				RTN_Close( rtn );
 
-				translated_rtn_num++;
+				g_translated_rtn_num++;
 			 } // end for RTN..
 		} // end for SEC...
 
@@ -1067,14 +1067,14 @@ namespace rtntran {
 	int copy_instrs_to_tc()
 	{
 		int cursor = 0;
-		for (int i=0; i < num_of_instr_map_entries; i++) {
-		  if ((ADDRINT)&tc[cursor] != instr_map[i].new_ins_addr) {
-			  cerr << "ERROR: Non-matching instruction addresses: " << hex << (ADDRINT)&tc[cursor] << " vs. " << instr_map[i].new_ins_addr << endl;
+		for (int i=0; i < g_num_of_instr_map_entries; i++) {
+		  if ((ADDRINT)&g_tc[cursor] != g_instr_map[i].new_ins_addr) {
+			  cerr << "ERROR: Non-matching instruction addresses: " << hex << (ADDRINT)&g_tc[cursor] << " vs. " << g_instr_map[i].new_ins_addr << endl;
 			  return -1;
 		  }
 
-		  memcpy(&tc[cursor], &instr_map[i].encoded_ins, instr_map[i].size);
-		  cursor += instr_map[i].size;
+		  memcpy(&g_tc[cursor], &g_instr_map[i].encoded_ins, g_instr_map[i].size);
+		  cursor += g_instr_map[i].size;
 		}
 
 		return 0;
@@ -1087,11 +1087,11 @@ namespace rtntran {
 	{
 		// Commit the translated functions:
 		// Go over the candidate functions and replace the original ones by their new successfully translated ones:
-		for (int i=0; i < translated_rtn_num; i++) {
+		for (int i=0; i < g_translated_rtn_num; i++) {
 			//replace function by new function in tc
-			if (translated_rtn[i].instr_map_entry >= 0) {
-				if (translated_rtn[i].rtn_size > MAX_PROBE_JUMP_INSTR_BYTES && translated_rtn[i].isSafeForReplacedProbe) {
-					RTN rtn = RTN_FindByAddress(translated_rtn[i].rtn_addr);
+			if (g_translated_rtn[i].instr_map_entry >= 0) {
+				if (g_translated_rtn[i].rtn_size > MAX_PROBE_JUMP_INSTR_BYTES && g_translated_rtn[i].isSafeForReplacedProbe) {
+					RTN rtn = RTN_FindByAddress(g_translated_rtn[i].rtn_addr);
 
 					//debug print:
 					if (rtn == RTN_Invalid()) {
@@ -1099,21 +1099,21 @@ namespace rtntran {
 					} else {
 						cerr << "committing rtN: " << RTN_Name(rtn);
 					}
-					cerr << " from: 0x" << hex << RTN_Address(rtn) << " to: 0x" << hex << instr_map[translated_rtn[i].instr_map_entry].new_ins_addr << endl;
+					cerr << " from: 0x" << hex << RTN_Address(rtn) << " to: 0x" << hex << g_instr_map[g_translated_rtn[i].instr_map_entry].new_ins_addr << endl;
 
 					if (RTN_IsSafeForProbedReplacement(rtn)) {
 
-						AFUNPTR origFptr = RTN_ReplaceProbed(rtn,  (AFUNPTR)instr_map[translated_rtn[i].instr_map_entry].new_ins_addr);
+						AFUNPTR origFptr = RTN_ReplaceProbed(rtn,  (AFUNPTR)g_instr_map[g_translated_rtn[i].instr_map_entry].new_ins_addr);
 
 						if (origFptr == NULL) {
 							cerr << "RTN_ReplaceProbed failed.";
 						} else {
 							cerr << "RTN_ReplaceProbed succeeded. ";
 						}
-						cerr << " orig routine addr: 0x" << hex << translated_rtn[i].rtn_addr
-								<< " replacement routine addr: 0x" << hex << instr_map[translated_rtn[i].instr_map_entry].new_ins_addr << endl;
+						cerr << " orig routine addr: 0x" << hex << g_translated_rtn[i].rtn_addr
+								<< " replacement routine addr: 0x" << hex << g_instr_map[g_translated_rtn[i].instr_map_entry].new_ins_addr << endl;
 #if 0
-						dump_instr_from_mem ((ADDRINT *)translated_rtn[i].rtn_addr, translated_rtn[i].rtn_addr);
+						dump_instr_from_mem ((ADDRINT *)g_translated_rtn[i].rtn_addr, g_translated_rtn[i].rtn_addr);
 #endif
 					}
 				}
@@ -1133,35 +1133,35 @@ namespace rtntran {
 			if (!SEC_IsExecutable(sec) || SEC_IsWriteable(sec) || !SEC_Address(sec))
 				continue;
 
-			if (!lowest_sec_addr || lowest_sec_addr > SEC_Address(sec))
-				lowest_sec_addr = SEC_Address(sec);
+			if (!g_lowest_sec_addr || g_lowest_sec_addr > SEC_Address(sec))
+				g_lowest_sec_addr = SEC_Address(sec);
 
-			if (highest_sec_addr < SEC_Address(sec) + SEC_Size(sec))
-				highest_sec_addr = SEC_Address(sec) + SEC_Size(sec);
+			if (g_highest_sec_addr < SEC_Address(sec) + SEC_Size(sec))
+				g_highest_sec_addr = SEC_Address(sec) + SEC_Size(sec);
 
 			// need to avouid using RTN_Open as it is expensive...
 			for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn))
 			{
 				if (rtn == RTN_Invalid()) continue;
 
-				max_ins_count += RTN_NumIns  (rtn);
-				max_rtn_count++;
+				g_max_ins_count += RTN_NumIns  (rtn);
+				g_max_rtn_count++;
 			}
 		}
 
-		max_ins_count *= 4; // estimating that the num of instrs of the inlined functions will not exceed the total nunmber of the entire code.
+		g_max_ins_count *= 4; // estimating that the num of instrs of the inlined functions will not exceed the total nunmber of the entire code.
 
 		// Allocate memory for the instr map needed to fix all branch targets in translated routines:
-		instr_map = (instr_map_t *)calloc(max_ins_count, sizeof(instr_map_t));
-		if (instr_map == NULL) {
+		g_instr_map = (instr_map_t *)calloc(g_max_ins_count, sizeof(instr_map_t));
+		if (g_instr_map == NULL) {
 			perror("calloc");
 			return -1;
 		}
 
 		// Allocate memory for the array of candidate routines containing inlineable function calls:
 		// Need to estimate size of inlined routines.. ???
-		translated_rtn = (translated_rtn_t *)calloc(max_rtn_count, sizeof(translated_rtn_t));
-		if (translated_rtn == NULL) {
+		g_translated_rtn = (translated_rtn_t *)calloc(g_max_rtn_count, sizeof(translated_rtn_t));
+		if (g_translated_rtn == NULL) {
 			perror("calloc");
 			return -1;
 		}
@@ -1173,7 +1173,7 @@ namespace rtntran {
 		  return -1;
 		}
 
-		ADDRINT text_size = (highest_sec_addr - lowest_sec_addr) * 2 + pagesize * 4;
+		ADDRINT text_size = (g_highest_sec_addr - g_lowest_sec_addr) * 2 + pagesize * 4;
 
 		int tclen = 2 * text_size + pagesize * 4;   // need a better estimate???
 
@@ -1184,7 +1184,7 @@ namespace rtntran {
 			return -1;
 		}
 
-		tc = (char *)addr;
+		g_tc = (char *)addr;
 		return 0;
 	}
 
