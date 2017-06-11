@@ -27,6 +27,13 @@ extern "C" {
 
 #pragma pack(1)
 
+namespace common {
+	const unsigned int TEN = 10;
+	typedef ADDRINT top_ten_t;
+	top_ten_t g_top_ten[TEN];
+	ADDRINT g_main_addr;
+}
+
 namespace ex2 {
 
 	typedef const std::pair<ADDRINT, USIZE> bbl_key_t;	// bbl_addr, bbl_size
@@ -74,8 +81,11 @@ namespace ex2 {
 
 	}
 
-	VOID Img(IMG img, VOID *v) // why VOID *v ?
+	VOID Img(IMG img, VOID *v)
 	{
+		if (IMG_IsMainExecutable(img))
+			common::g_main_addr = IMG_LowAddress(img);
+
 		g_img_map[IMG_Name(img)] = IMG_LowAddress(img);
 	}
 
@@ -280,7 +290,7 @@ namespace ex2 {
 			return (n1.rtn_addr > n2.rtn_addr);
 		}
 	};
-
+	
 	void print(const std::string &file_name)
 	{
 		std::ofstream file(file_name.c_str());
@@ -306,8 +316,12 @@ namespace ex2 {
 			printing_ds_sorted.insert(print_it->second);
 		}
 
+		unsigned int top_rtn_idx = 0;
 		for(std::set<printing_rtn_t, cmp_printing_rtn>::iterator print_it = printing_ds_sorted.begin() ; print_it != printing_ds_sorted.end() ; ++print_it) {
-			// TODO: this is not sorted by the counter
+			
+			if ((top_rtn_idx < common::TEN) && (print_it->img_addr == common::g_main_addr))
+				common::g_top_ten[top_rtn_idx++] = print_it->rtn_addr;
+			
 			file << (print_it->rtn_name) <<
 				" at 0x" << std::hex << print_it->rtn_addr -  print_it->img_addr <<
 				std::dec << " : icount: " << (print_it->counter) << std::endl;
@@ -336,14 +350,44 @@ namespace ex2 {
 
 	}
 
+	void write_top10(const std::string &file_name)
+	{
+		int fd;
+		char *p;
+		unsigned int count = 0, map_size = 0;
+
+		if ((fd = open(file_name.c_str(), O_RDWR | O_CREAT , S_IRWXU)) >= 0) { //read file
+
+			map_size = sizeof(count);
+			if ((p = (char*)mmap(0, map_size, PROT_READ, MAP_SHARED, fd, 0)) == (caddr_t) -1) {std::cerr << "Error" << std::endl; return;}
+
+			count = *(unsigned int*)p;
+			map_size += count * sizeof(bbl_to_file_t) + sizeof(common::g_top_ten);
+
+			//write dummy byte
+			if (lseek(fd, map_size-1, 0) == -1) {std::cerr << "Error" << std::endl; return;}
+			if (write(fd, "", 1) != 1) {std::cerr << "Error" << std::endl; return;}
+			if (lseek(fd, 0, 0) == -1) {std::cerr << "Error" << std::endl; return;}
+
+			if ((p = (char*)mmap(0, map_size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0)) == (caddr_t) -1) {std::cerr << "Error" << std::endl; return;}
+			p += sizeof(count) + count * sizeof(bbl_to_file_t);
+
+			memcpy(p, common::g_top_ten, sizeof(common::g_top_ten));
+
+			if (close(fd) < 0) {std::cerr << "Error" << std::endl; return;}
+		}
+			
+	}
+	
 	VOID Fini(INT32 code, VOID *v)
 	{
 		update_file("__profile.map");
 		print("rtn-output.txt");
+		write_top10("__profile.map");
 	}
 }
 
-namespace rtntran {
+namespace ex3 {
 	BOOL KnobVerbose = FALSE;
 	BOOL KnobDumpTranslatedCode = FALSE;
 	BOOL KnobDoNotCommitTranslatedCode = FALSE;
@@ -404,6 +448,29 @@ namespace rtntran {
 	translated_rtn_t *g_translated_rtn;
 	int g_translated_rtn_num = 0;
 
+	void read_top10(const std::string &file_name)
+	{
+		int fd;
+		char *p;
+		unsigned int count = 0, map_size = 0;
+
+		if ((fd = open(file_name.c_str(), O_RDONLY)) >= 0) { //read file
+
+			map_size = sizeof(count);
+			if ((p = (char*)mmap(0, map_size, PROT_READ, MAP_SHARED, fd, 0)) == (caddr_t) -1) {std::cerr << "Error" << std::endl; return;}
+
+			count = *(unsigned int*)p;
+			map_size += count * sizeof(ex2::bbl_to_file_t) + sizeof(common::g_top_ten);
+
+			if ((p = (char*)mmap(0, map_size, PROT_READ, MAP_SHARED, fd, 0)) == (caddr_t) -1) {std::cerr << "Error" << std::endl; return;}
+			p += sizeof(count) + count * sizeof(ex2::bbl_to_file_t);
+
+			memcpy(common::g_top_ten, p, sizeof(common::g_top_ten));
+
+			if (close(fd) < 0) {std::cerr << "Error" << std::endl; return;}
+		}
+	}
+	
 #if 0
 	/* ============================================================= */
 	/* Service dump routines                                         */
@@ -1006,7 +1073,13 @@ namespace rtntran {
 				  cerr << "Warning: invalid routine " << RTN_Name(rtn) << endl;
 				  continue;
 				}
-
+				
+				bool is_top_ten = false;
+				for (unsigned int i = 0; i < common::TEN; ++i)
+					if (common::g_top_ten[i] == RTN_Address(rtn)) is_top_ten = true;
+				
+				if (!is_top_ten) continue;
+				
 				g_translated_rtn[g_translated_rtn_num].rtn_addr = RTN_Address(rtn);
 				g_translated_rtn[g_translated_rtn_num].rtn_size = RTN_Size(rtn);
 				g_translated_rtn[g_translated_rtn_num].instr_map_entry = g_num_of_instr_map_entries;
@@ -1256,11 +1329,11 @@ namespace rtntran {
 }
 
 KNOB<BOOL> KnobProf(KNOB_MODE_WRITEONCE, "pintool", "prof", "0", "generate profile");
-KNOB<BOOL> KnobOpt (KNOB_MODE_WRITEONCE, "pintool", "opt" , "0", "optimize binary");
+KNOB<BOOL> KnobInst(KNOB_MODE_WRITEONCE, "pintool", "inst" , "0", "instrument binary");
 
 INT32 Usage()
 {
-    std::cerr << "Usage: pin -t ex3.so -prof|opt -- <executable>" << std::endl;
+    std::cerr << "Usage: pin -t ex3.so -prof|inst -- <executable>" << std::endl;
     return -1;
 }
 
@@ -1268,7 +1341,7 @@ int main(int argc, char *argv[])
 {
 	PIN_InitSymbols();
 	if(PIN_Init(argc,argv)) return Usage();
-	if ((KnobProf && KnobOpt) || (!KnobProf && !KnobOpt)) return Usage();
+	if ((KnobProf && KnobInst) || (!KnobProf && !KnobInst)) return Usage();
 
 	if (KnobProf)
 	{
@@ -1279,9 +1352,10 @@ int main(int argc, char *argv[])
 		PIN_StartProgram();
 	}
 
-	if (KnobOpt)
+	if (KnobInst)
 	{
-		IMG_AddInstrumentFunction(rtntran::ImageLoad, 0);
+		ex3::read_top10("__profile.map");
+		IMG_AddInstrumentFunction(ex3::ImageLoad, 0);
 		PIN_StartProgramProbed();
 	}
 
