@@ -1280,28 +1280,28 @@ namespace ex3 {
 		if (rc < 0)
 			return;
 
-		cout << "after memory allocation" << endl;
+		//cout << "after memory allocation" << endl;
 
 		// Step 2: go over all routines and identify candidate routines and copy their code into the instr map IR:
 		rc = find_candidate_rtns_for_translation(img);
 		if (rc < 0)
 			return;
 
-		cout << "after identifying candidate routines" << endl;
+		//cout << "after identifying candidate routines" << endl;
 
 		// Step 3: Chaining - calculate direct branch and call instructions to point to corresponding target instr entries:
 		rc = chain_all_direct_br_and_call_target_entries();
 		if (rc < 0 )
 			return;
 
-		cout << "after calculate direct br targets" << endl;
+		//cout << "after calculate direct br targets" << endl;
 
 		// Step 4: fix rip-based, direct branch and direct call displacements:
 		rc = fix_instructions_displacements();
 		if (rc < 0 )
 			return;
 
-		cout << "after fix instructions displacements" << endl;
+		//cout << "after fix instructions displacements" << endl;
 
 
 		// Step 5: write translated routines to new tc:
@@ -1309,7 +1309,7 @@ namespace ex3 {
 		if (rc < 0 )
 			return;
 
-		cout << "after write all new instructions to memory tc" << endl;
+		//cout << "after write all new instructions to memory tc" << endl;
 #if 0
 	   if (KnobDumpTranslatedCode) {
 		   cerr << "Translation Cache dump:" << endl;
@@ -1324,7 +1324,7 @@ namespace ex3 {
 		//Go over the candidate functions and replace the original ones by their new successfully translated ones:
 		commit_translated_routines();
 
-		cout << "after commit translated routines" << endl;
+		//cout << "after commit translated routines" << endl;
 	}
 }
 
