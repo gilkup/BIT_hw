@@ -72,3 +72,21 @@ SANITY_SUBSET := $(TEST_TOOL_ROOTS) $(TEST_ROOTS)
 
 # This section contains the build rules for all binaries that have special build rules.
 # See makefile.default.rules for the default build rules.
+
+TOOL_CXXFLAGS := $(TOOL_CXXFLAGS) -std=c++11
+
+# Build the intermediate object file.
+$(OBJDIR)ex$(OBJ_SUFFIX): ex.cpp
+	$(CXX) $(TOOL_CXXFLAGS) $(COMP_OBJ)$@ $<
+
+# Build the intermediate object file.
+$(OBJDIR)AllocData$(OBJ_SUFFIX): AllocData.cpp
+	$(CXX) $(TOOL_CXXFLAGS) $(COMP_OBJ)$@ $<
+
+# Build the intermediate object file.
+$(OBJDIR)Tracer$(OBJ_SUFFIX): Tracer.cpp AllocData.cpp
+	$(CXX) $(TOOL_CXXFLAGS) $(COMP_OBJ)$@ $<
+
+# Build the tool as a dll (shared object).
+$(OBJDIR)ex$(PINTOOL_SUFFIX): $(OBJDIR)ex$(OBJ_SUFFIX) $(OBJDIR)Tracer$(OBJ_SUFFIX) $(OBJDIR)AllocData$(OBJ_SUFFIX)
+	$(LINKER) $(TOOL_LDFLAGS_NOOPT) $(LINK_EXE)$@ $(^:%.h=) $(TOOL_LPATHS) $(TOOL_LIBS)
