@@ -1575,6 +1575,7 @@ KNOB<BOOL> KnobProf(KNOB_MODE_WRITEONCE, "pintool", "prof", "0", "generate profi
 KNOB<BOOL> KnobInst(KNOB_MODE_WRITEONCE, "pintool", "inst" , "0", "instrument binary");
 KNOB<BOOL> KnobProj(KNOB_MODE_WRITEONCE, "pintool", "proj" , "0", "project");
 
+
 INT32 Usage()
 {
     std::cerr << "Usage: pin -t ex3.so -prof|inst -- <executable>" << std::endl;
@@ -1602,7 +1603,6 @@ int main(int argc, char *argv[])
 		IMG_AddInstrumentFunction(ex3::ImageLoad, 0);
 		PIN_StartProgramProbed();
 	}
-	
 	if (KnobProj)
 	{
 		// Register Image to be called to instrument functions.
