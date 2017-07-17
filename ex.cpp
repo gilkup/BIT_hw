@@ -387,7 +387,7 @@ namespace ex2 {
 	}
 }
 
-namespace ex3 {
+namespace ex3_4 {
 	BOOL KnobVerbose = FALSE;
 	BOOL KnobDumpTranslatedCode = FALSE;
 	BOOL KnobDoNotCommitTranslatedCode = FALSE;
@@ -1054,86 +1054,6 @@ namespace ex3 {
 	   return 0;
 	}
 
-	/*****************************************/
-	/* find_candidate_rtns_for_translation() */
-	/*****************************************/
-	int find_candidate_rtns_for_translation(IMG img, unsigned int rtn_nums)
-	{
-		int rc;
-
-		// go over routines and check if they are candidates for translation and mark them for translation:
-		for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec))
-		{
-			if (!SEC_IsExecutable(sec) || SEC_IsWriteable(sec) || !SEC_Address(sec))
-				continue;
-
-			for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn))
-			{
-				if (rtn == RTN_Invalid()) {
-				  cerr << "Warning: invalid routine " << RTN_Name(rtn) << endl;
-				  continue;
-				}
-				
-				bool is_top_ten = false;
-				for (unsigned int i = 0; i < rtn_nums; ++i)
-					if (common::g_top_ten[i] == RTN_Address(rtn)) is_top_ten = true;
-				
-				if (!is_top_ten) continue;
-				
-				g_translated_rtn[g_translated_rtn_num].rtn_addr = RTN_Address(rtn);
-				g_translated_rtn[g_translated_rtn_num].rtn_size = RTN_Size(rtn);
-				g_translated_rtn[g_translated_rtn_num].instr_map_entry = g_num_of_instr_map_entries;
-				g_translated_rtn[g_translated_rtn_num].isSafeForReplacedProbe = true;
-
-				// Open the RTN.
-				RTN_Open( rtn );
-
-				for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
-					//debug print of orig instruction:
-					if (KnobVerbose) {
-						cerr << "old instr: ";
-						cerr << "0x" << hex << INS_Address(ins) << ": " << INS_Disassemble(ins) <<  endl;
-						//xed_print_hex_line(reinterpret_cast<UINT8*>(INS_Address (ins)), INS_Size(ins));
-					}
-
-					ADDRINT addr = INS_Address(ins);
-
-					xed_decoded_inst_t xedd;
-					xed_error_enum_t xed_code;
-
-					xed_decoded_inst_zero_set_mode(&xedd,&g_dstate);
-
-					xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(addr), g_max_inst_len);
-					if (xed_code != XED_ERROR_NONE) {
-						cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
-						g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
-						break;
-					}
-
-					// Add instr into instr map:
-					rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins));
-					if (rc < 0) {
-						cerr << "ERROR: failed during instructon translation." << endl;
-						g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
-						break;
-					}
-				} // end for INS...
-
-				// debug print of routine name:
-				if (KnobVerbose) {
-					cerr <<   "rtn name: " << RTN_Name(rtn) << " : " << dec << g_translated_rtn_num << endl;
-				}
-
-				// Close the RTN.
-				RTN_Close( rtn );
-
-				g_translated_rtn_num++;
-			 } // end for RTN..
-		} // end for SEC...
-
-		return 0;
-	}
-
 	/***************************/
 	/* int copy_instrs_to_tc() */
 	/***************************/
@@ -1260,6 +1180,89 @@ namespace ex3 {
 		g_tc = (char *)addr;
 		return 0;
 	}
+}
+
+namespace ex3 {
+	using namespace ex3_4;
+	/*****************************************/
+	/* find_candidate_rtns_for_translation() */
+	/*****************************************/
+	int find_candidate_rtns_for_translation(IMG img)
+	{
+		int rc;
+
+		// go over routines and check if they are candidates for translation and mark them for translation:
+		for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec))
+		{
+			if (!SEC_IsExecutable(sec) || SEC_IsWriteable(sec) || !SEC_Address(sec))
+				continue;
+
+			for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn))
+			{
+				if (rtn == RTN_Invalid()) {
+				  cerr << "Warning: invalid routine " << RTN_Name(rtn) << endl;
+				  continue;
+				}
+
+				bool is_top_ten = false;
+				for (unsigned int i = 0; i < common::TEN; ++i)
+					if (common::g_top_ten[i] == RTN_Address(rtn)) is_top_ten = true;
+
+				if (!is_top_ten) continue;
+
+				g_translated_rtn[g_translated_rtn_num].rtn_addr = RTN_Address(rtn);
+				g_translated_rtn[g_translated_rtn_num].rtn_size = RTN_Size(rtn);
+				g_translated_rtn[g_translated_rtn_num].instr_map_entry = g_num_of_instr_map_entries;
+				g_translated_rtn[g_translated_rtn_num].isSafeForReplacedProbe = true;
+
+				// Open the RTN.
+				RTN_Open( rtn );
+
+				for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
+					//debug print of orig instruction:
+					if (KnobVerbose) {
+						cerr << "old instr: ";
+						cerr << "0x" << hex << INS_Address(ins) << ": " << INS_Disassemble(ins) <<  endl;
+						//xed_print_hex_line(reinterpret_cast<UINT8*>(INS_Address (ins)), INS_Size(ins));
+					}
+
+					ADDRINT addr = INS_Address(ins);
+
+					xed_decoded_inst_t xedd;
+					xed_error_enum_t xed_code;
+
+					xed_decoded_inst_zero_set_mode(&xedd,&g_dstate);
+
+					xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(addr), g_max_inst_len);
+					if (xed_code != XED_ERROR_NONE) {
+						cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
+						g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
+						break;
+					}
+
+					// Add instr into instr map:
+					rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins));
+					if (rc < 0) {
+						cerr << "ERROR: failed during instructon translation." << endl;
+						g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
+						break;
+					}
+				} // end for INS...
+
+				// debug print of routine name:
+				if (KnobVerbose) {
+					cerr <<   "rtn name: " << RTN_Name(rtn) << " : " << dec << g_translated_rtn_num << endl;
+				}
+
+				// Close the RTN.
+				RTN_Close( rtn );
+
+				g_translated_rtn_num++;
+			 } // end for RTN..
+		} // end for SEC...
+
+		return 0;
+	}
 
 	/* ============================================ */
 	/* Main translation routine                     */
@@ -1283,7 +1286,7 @@ namespace ex3 {
 		//cout << "after memory allocation" << endl;
 
 		// Step 2: go over all routines and identify candidate routines and copy their code into the instr map IR:
-		rc = find_candidate_rtns_for_translation(img, common::TEN);
+		rc = find_candidate_rtns_for_translation(img);
 		if (rc < 0)
 			return;
 
@@ -1329,31 +1332,108 @@ namespace ex3 {
 }
 
 namespace ex4 {
+	using namespace ex3_4;
+
+	/*****************************************/
+	/* find_candidate_rtns_for_translation() */
+	/*****************************************/
+	int find_candidate_top_rtn_for_translation(IMG img)
+	{
+		int rc;
+
+		// go over routines and check if they are candidates for translation and mark them for translation:
+		for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec))
+		{
+			if (!SEC_IsExecutable(sec) || SEC_IsWriteable(sec) || !SEC_Address(sec))
+				continue;
+
+			for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn))
+			{
+				if (rtn == RTN_Invalid()) {
+				  cerr << "Warning: invalid routine " << RTN_Name(rtn) << endl;
+				  continue;
+				}
+
+				if (RTN_Address(rtn) != common::g_top_ten[0]) continue;
+
+				g_translated_rtn[g_translated_rtn_num].rtn_addr = RTN_Address(rtn);
+				g_translated_rtn[g_translated_rtn_num].rtn_size = RTN_Size(rtn);
+				g_translated_rtn[g_translated_rtn_num].instr_map_entry = g_num_of_instr_map_entries;
+				g_translated_rtn[g_translated_rtn_num].isSafeForReplacedProbe = true;
+
+				// Open the RTN.
+				RTN_Open( rtn );
+
+				for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
+					//debug print of orig instruction:
+					if (KnobVerbose) {
+						cerr << "old instr: ";
+						cerr << "0x" << hex << INS_Address(ins) << ": " << INS_Disassemble(ins) <<  endl;
+						//xed_print_hex_line(reinterpret_cast<UINT8*>(INS_Address (ins)), INS_Size(ins));
+					}
+
+					ADDRINT addr = INS_Address(ins);
+
+					xed_decoded_inst_t xedd;
+					xed_error_enum_t xed_code;
+
+					xed_decoded_inst_zero_set_mode(&xedd,&g_dstate);
+
+					xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(addr), g_max_inst_len);
+					if (xed_code != XED_ERROR_NONE) {
+						cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
+						g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
+						break;
+					}
+
+					// Add instr into instr map:
+					rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins));
+					if (rc < 0) {
+						cerr << "ERROR: failed during instructon translation." << endl;
+						g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
+						break;
+					}
+				} // end for INS...
+
+				// debug print of routine name:
+				if (KnobVerbose) {
+					cerr <<   "rtn name: " << RTN_Name(rtn) << " : " << dec << g_translated_rtn_num << endl;
+				}
+
+				// Close the RTN.
+				RTN_Close( rtn );
+
+				g_translated_rtn_num++;
+			 } // end for RTN..
+		} // end for SEC...
+
+		return 0;
+	}
+
 	VOID ImageLoad(IMG img, VOID *v)
 	{
-		// Step 0: Check the image and the CPU:
-		if (!IMG_IsMainExecutable(img))
-			return;
-
 		int rc = 0;
 
+		// Step 0: Check the image and the CPU:
+		if (!IMG_IsMainExecutable(img)) return;
+
 		// step 1: Check size of executable sections and allocate required memory:
-		if ((rc = ex3::allocate_and_init_memory(img)) < 0) return;
+		if ((rc = allocate_and_init_memory(img)) < 0) return;
 
 		// Step 2: go over all routines and identify candidate routines and copy their code into the instr map IR:
-		if ((rc = ex3::find_candidate_rtns_for_translation(img, 1)) < 0) return;
+		if ((rc = find_candidate_top_rtn_for_translation(img)) < 0) return;
 
 		// Step 3: Chaining - calculate direct branch and call instructions to point to corresponding target instr entries:
-		if ((rc = ex3::chain_all_direct_br_and_call_target_entries()) < 0 ) return;
+		if ((rc = chain_all_direct_br_and_call_target_entries()) < 0 ) return;
 
 		// Step 4: fix rip-based, direct branch and direct call displacements:
-		if ((rc = ex3::fix_instructions_displacements()) < 0 ) return;
+		if ((rc = fix_instructions_displacements()) < 0 ) return;
 
 		// Step 5: write translated routines to new tc:
-		if ((rc = ex3::copy_instrs_to_tc()) < 0 ) return;
+		if ((rc = copy_instrs_to_tc()) < 0 ) return;
 
 		// Step 6: Commit the translated routines:
-		ex3::commit_translated_routines();
+		commit_translated_routines();
 	}
 }
 
@@ -1374,7 +1454,7 @@ int main(int argc, char *argv[])
 
 	if (!!KnobProf + !!KnobInst + !!KnobOpt != 1) return Usage();
 
-	if (KnobProf)
+	if (KnobProf) // hw2
 	{
 		TRACE_AddInstrumentFunction(ex2::Trace, 0);
 		IMG_AddInstrumentFunction(ex2::Img, 0);
@@ -1383,16 +1463,17 @@ int main(int argc, char *argv[])
 		PIN_StartProgram();
 	}
 
-	if (KnobInst)
+	if (KnobInst) // hw3
 	{
 		if (!ex3::read_top10("__profile.map")) return 1;
 		IMG_AddInstrumentFunction(ex3::ImageLoad, 0);
 		PIN_StartProgramProbed();
 	}
 
-	if (KnobOpt)
+	if (KnobOpt) // hw4
 	{
 		if (!ex3::read_top10("__profile.map")) return 1;
+		ex2::update_file("__profile.map");
 		IMG_AddInstrumentFunction(ex4::ImageLoad, 0);
 		PIN_StartProgramProbed();
 	}
