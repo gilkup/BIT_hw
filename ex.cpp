@@ -217,7 +217,7 @@ namespace ex2 {
 			INS last_ins = BBL_InsTail(bbl);
 
 			ADDRINT bbl_addr = BBL_Address(bbl);
-			USIZE bbl_size = BBL_Size(bbl) - INS_Size(last_ins);
+			USIZE bbl_size = BBL_Size(bbl);
 			bbl_key_t bbl_key = make_pair(bbl_addr, bbl_size);
 
 			RTN rtn = INS_Rtn(first_ins);
