@@ -12,6 +12,7 @@
 #include <string>
 #include <set>
 #include <map>
+#include <list>
 #include <iostream>
 #include <algorithm>
 
@@ -1335,7 +1336,7 @@ namespace ex3 {
 namespace ex4 {
 	using namespace ex3_4;
 
-	const char NOP = 0x90;
+	unsigned char NOP = 0x90;
 	xed_decoded_inst_t xedd_nop;
 
 	struct bbl_data_t{
@@ -1392,10 +1393,10 @@ namespace ex4 {
 
 				ADDRINT function_base_tc = (ADDRINT)&g_tc[g_tc_cursor];
 
-				bbls_order_t::const_iterator it = g_bbls_order();
+				bbls_order_t::const_iterator it = g_bbls_order.begin();
 				while (it != g_bbls_order.end())
 				{
-					ADDRINT bbl_start_orig = *it + RTN_Address(rtn);
+					//ADDRINT bbl_start_orig = *it + RTN_Address(rtn);
 					ADDRINT bbl_start_new  = g_new_bbls[*it].new_addr + function_base_tc;
 					while ((ADDRINT)&g_tc[g_tc_cursor] < bbl_start_new)
 					{
@@ -1423,7 +1424,7 @@ namespace ex4 {
 						}
 
 						// Add instr into instr map:
-						rc = add_new_instr_entry(&xedd, INS_Address(ins), xed_decoded_inst_get_length (xedd));
+						rc = add_new_instr_entry(&xedd, addr, xed_decoded_inst_get_length(&xedd));
 						if (rc < 0) {
 							cerr << "ERROR: failed during instructon translation." << endl;
 							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
@@ -1433,12 +1434,16 @@ namespace ex4 {
 						i += rc;
 					}
 
-					if (g_tc[g_tc_cursor].orig_targ_addr)
-						g_tc[g_tc_cursor].orig_targ_addr = g_new_bbls[g_tc[g_tc_cursor].orig_targ_addr].new_addr + function_base_tc;
+					if (g_instr_map[g_num_of_instr_map_entries].orig_targ_addr)
+					{
+						ADDRINT orig_offset = g_instr_map[g_num_of_instr_map_entries].orig_targ_addr - RTN_Address(rtn);
+						g_instr_map[g_num_of_instr_map_entries].orig_targ_addr = g_new_bbls[orig_offset].new_addr + function_base_tc;
+						
+					}
 
 					if ((++it) != g_bbls_order.end())
 					{
-						char jmp[5] = {0xe9, 0, 0, 0, 0};
+						unsigned char jmp[5] = {0xe9, 0, 0, 0, 0};
 						ADDRINT loc = g_new_bbls[*it].new_addr - (ADDRINT)&g_tc[g_tc_cursor] - 5;
 						memcpy(jmp + 1, &loc, 4);
 
@@ -1449,13 +1454,13 @@ namespace ex4 {
 
 						xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(&jmp), g_max_inst_len);
 						if (xed_code != XED_ERROR_NONE) {
-							cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
+							cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << 0 << endl;
 							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
 							break;
 						}
 
 						// Add instr into instr map:
-						rc = add_new_instr_entry(&xedd, 0, xed_decoded_inst_get_length (xedd));
+						rc = add_new_instr_entry(&xedd, 0, xed_decoded_inst_get_length(&xedd));
 						if (rc < 0) {
 							cerr << "ERROR: failed during instructon translation." << endl;
 							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
@@ -1538,8 +1543,8 @@ int main(int argc, char *argv[])
 	if (KnobOpt) // hw4
 	{
 
-		xed_decoded_inst_zero_set_mode(&xedd_nop,&g_dstate);
-		if (xed_decode(&xedd_nop, reinterpret_cast<UINT8*>(&NOP), 1) != XED_ERROR_NONE) return 1;
+		xed_decoded_inst_zero_set_mode(&ex4::xedd_nop,&ex4::g_dstate);
+		if (xed_decode(&ex4::xedd_nop, reinterpret_cast<UINT8*>(&ex4::NOP), 1) != XED_ERROR_NONE) return 1;
 
 		if (!ex3::read_top10("__profile.map")) return 1;
 		ex2::update_file("__profile.map");
