@@ -1513,7 +1513,7 @@ KNOB<BOOL> KnobOpt (KNOB_MODE_WRITEONCE, "pintool", "opt"  , "0", "optimize");
 
 INT32 Usage()
 {
-    std::cerr << "Usage: pin -t ex3.so -prof|inst -- <executable>" << std::endl;
+    std::cerr << "Usage: pin -t ex4.so -prof|inst|opt -- <executable>" << std::endl;
     return -1;
 }
 
