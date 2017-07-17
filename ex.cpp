@@ -290,7 +290,7 @@ namespace ex2 {
 			return (n1.rtn_addr > n2.rtn_addr);
 		}
 	};
-	
+
 	void print(const std::string &file_name)
 	{
 		std::ofstream file(file_name.c_str());
@@ -318,10 +318,10 @@ namespace ex2 {
 
 		unsigned int top_rtn_idx = 0;
 		for(std::set<printing_rtn_t, cmp_printing_rtn>::iterator print_it = printing_ds_sorted.begin() ; print_it != printing_ds_sorted.end() ; ++print_it) {
-			
+
 			if ((top_rtn_idx < common::TEN) && (print_it->img_addr == common::g_main_addr))
 				common::g_top_ten[top_rtn_idx++] = print_it->rtn_addr;
-			
+
 			file << (print_it->rtn_name) <<
 				" at 0x" << std::hex << print_it->rtn_addr -  print_it->img_addr <<
 				std::dec << " : icount: " << (print_it->counter) << std::endl;
@@ -376,9 +376,9 @@ namespace ex2 {
 
 			if (close(fd) < 0) {std::cerr << "Error" << std::endl; return;}
 		}
-			
+
 	}
-	
+
 	VOID Fini(INT32 code, VOID *v)
 	{
 		update_file("__profile.map");
@@ -470,7 +470,7 @@ namespace ex3_4 {
 
 		return true;
 	}
-	
+
 #if 0
 	/* ============================================================= */
 	/* Service dump routines                                         */
@@ -1184,6 +1184,7 @@ namespace ex3_4 {
 
 namespace ex3 {
 	using namespace ex3_4;
+
 	/*****************************************/
 	/* find_candidate_rtns_for_translation() */
 	/*****************************************/
@@ -1217,16 +1218,6 @@ namespace ex3 {
 
 				// Open the RTN.
 				RTN_Open( rtn );
-
-				//bbl_start_orig = list.begin()
-				//do
-				//  while index < map[bbl_orig_start].new_place: put nop
-				//	for (ins = bbl_start_orig + map[bbl_orig_start].orig_size)
-				//		copy ins to map[bbl_orig_start].new_place
-				//	fix last br if needed (fix from some orig to map[orig].new_address)
-				//	bbl_start_orig.next();
-				//  if bbl_start_orig: put jmp to map[bbl_start_orig].new_addr
-				//while (bbl_start_orig)
 
 				for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
 					//debug print of orig instruction:
@@ -1344,6 +1335,21 @@ namespace ex3 {
 namespace ex4 {
 	using namespace ex3_4;
 
+	const char NOP = 0x90;
+	xed_decoded_inst_t xedd_nop;
+
+	struct bbl_data_t{
+		USIZE orig_size;
+		USIZE new_size;
+		ADDRINT new_addr;
+	};
+
+	typedef std::list<ADDRINT> bbls_order_t;
+	typedef std::map<ADDRINT, bbl_data_t> new_bbls_t;
+
+	bbls_order_t g_bbls_order;
+	new_bbls_t g_new_bbls;
+
 	/*****************************************/
 	/* find_candidate_rtns_for_translation() */
 	/*****************************************/
@@ -1374,40 +1380,89 @@ namespace ex4 {
 				// Open the RTN.
 				RTN_Open( rtn );
 
-				for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
-					//debug print of orig instruction:
-					if (KnobVerbose) {
-						cerr << "old instr: ";
-						cerr << "0x" << hex << INS_Address(ins) << ": " << INS_Disassemble(ins) <<  endl;
-						//xed_print_hex_line(reinterpret_cast<UINT8*>(INS_Address (ins)), INS_Size(ins));
+				//bbl_start_orig = list.begin()
+				//do
+				//  while index < map[bbl_orig_start].new_place: put nop
+				//	for (ins = bbl_start_orig + map[bbl_orig_start].orig_size)
+				//		copy ins to map[bbl_orig_start].new_place
+				//	fix last br if needed (fix from some orig to map[orig].new_address)
+				//	bbl_start_orig.next();
+				//  if bbl_start_orig: put jmp to map[bbl_start_orig].new_addr
+				//while (bbl_start_orig)
+
+				ADDRINT function_base_tc = (ADDRINT)&g_tc[g_tc_cursor];
+
+				bbls_order_t::const_iterator it = g_bbls_order();
+				while (it != g_bbls_order.end())
+				{
+					ADDRINT bbl_start_orig = *it + RTN_Address(rtn);
+					ADDRINT bbl_start_new  = g_new_bbls[*it].new_addr + function_base_tc;
+					while ((ADDRINT)&g_tc[g_tc_cursor] < bbl_start_new)
+					{
+						if (add_new_instr_entry(&xedd_nop, 0, 1) < 0) {
+							cerr << "ERROR: failed during instructon translation." << endl;
+							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
+							break;
+						}
 					}
 
-					ADDRINT addr = INS_Address(ins);
+					for (USIZE i = 0; i < g_new_bbls[*it].orig_size;)
+					{
+						ADDRINT addr = *it + i;
 
-					xed_decoded_inst_t xedd;
-					xed_error_enum_t xed_code;
+						xed_decoded_inst_t xedd;
+						xed_error_enum_t xed_code;
 
-					xed_decoded_inst_zero_set_mode(&xedd,&g_dstate);
+						xed_decoded_inst_zero_set_mode(&xedd,&g_dstate);
 
-					xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(addr), g_max_inst_len);
-					if (xed_code != XED_ERROR_NONE) {
-						cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
-						g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
-						break;
+						xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(addr), g_max_inst_len);
+						if (xed_code != XED_ERROR_NONE) {
+							cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
+							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
+							break;
+						}
+
+						// Add instr into instr map:
+						rc = add_new_instr_entry(&xedd, INS_Address(ins), xed_decoded_inst_get_length (xedd));
+						if (rc < 0) {
+							cerr << "ERROR: failed during instructon translation." << endl;
+							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
+							break;
+						}
+
+						i += rc;
 					}
 
-					// Add instr into instr map:
-					rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins));
-					if (rc < 0) {
-						cerr << "ERROR: failed during instructon translation." << endl;
-						g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
-						break;
-					}
-				} // end for INS...
+					if (g_tc[g_tc_cursor].orig_targ_addr)
+						g_tc[g_tc_cursor].orig_targ_addr = g_new_bbls[g_tc[g_tc_cursor].orig_targ_addr].new_addr + function_base_tc;
 
-				// debug print of routine name:
-				if (KnobVerbose) {
-					cerr <<   "rtn name: " << RTN_Name(rtn) << " : " << dec << g_translated_rtn_num << endl;
+					if ((++it) != g_bbls_order.end())
+					{
+						char jmp[5] = {0xe9, 0, 0, 0, 0};
+						ADDRINT loc = g_new_bbls[*it].new_addr - (ADDRINT)&g_tc[g_tc_cursor] - 5;
+						memcpy(jmp + 1, &loc, 4);
+
+						xed_decoded_inst_t xedd;
+						xed_error_enum_t xed_code;
+
+						xed_decoded_inst_zero_set_mode(&xedd,&g_dstate);
+
+						xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(&jmp), g_max_inst_len);
+						if (xed_code != XED_ERROR_NONE) {
+							cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
+							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
+							break;
+						}
+
+						// Add instr into instr map:
+						rc = add_new_instr_entry(&xedd, 0, xed_decoded_inst_get_length (xedd));
+						if (rc < 0) {
+							cerr << "ERROR: failed during instructon translation." << endl;
+							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
+							break;
+						}
+
+					}
 				}
 
 				// Close the RTN.
@@ -1482,6 +1537,10 @@ int main(int argc, char *argv[])
 
 	if (KnobOpt) // hw4
 	{
+
+		xed_decoded_inst_zero_set_mode(&xedd_nop,&g_dstate);
+		if (xed_decode(&xedd_nop, reinterpret_cast<UINT8*>(&NOP), 1) != XED_ERROR_NONE) return 1;
+
 		if (!ex3::read_top10("__profile.map")) return 1;
 		ex2::update_file("__profile.map");
 		IMG_AddInstrumentFunction(ex4::ImageLoad, 0);
