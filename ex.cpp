@@ -1218,6 +1218,16 @@ namespace ex3 {
 				// Open the RTN.
 				RTN_Open( rtn );
 
+				//bbl_start_orig = list.begin()
+				//do
+				//  while index < map[bbl_orig_start].new_place: put nop
+				//	for (ins = bbl_start_orig + map[bbl_orig_start].orig_size)
+				//		copy ins to map[bbl_orig_start].new_place
+				//	fix last br if needed (fix from some orig to map[orig].new_address)
+				//	bbl_start_orig.next();
+				//  if bbl_start_orig: put jmp to map[bbl_start_orig].new_addr
+				//while (bbl_start_orig)
+
 				for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
 					//debug print of orig instruction:
 					if (KnobVerbose) {
