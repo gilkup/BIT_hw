@@ -448,27 +448,27 @@ namespace ex3 {
 	translated_rtn_t *g_translated_rtn;
 	int g_translated_rtn_num = 0;
 
-	void read_top10(const std::string &file_name)
+	bool read_top10(const std::string &file_name)
 	{
 		int fd;
 		char *p;
 		unsigned int count = 0, map_size = 0;
 
-		if ((fd = open(file_name.c_str(), O_RDONLY)) >= 0) { //read file
+		if ((fd = open(file_name.c_str(), O_RDONLY)) < 0) return false;
+		map_size = sizeof(count);
+		if ((p = (char*)mmap(0, map_size, PROT_READ, MAP_SHARED, fd, 0)) == (caddr_t) -1) {std::cerr << "Error" << std::endl; return false;}
 
-			map_size = sizeof(count);
-			if ((p = (char*)mmap(0, map_size, PROT_READ, MAP_SHARED, fd, 0)) == (caddr_t) -1) {std::cerr << "Error" << std::endl; return;}
+		count = *(unsigned int*)p;
+		map_size += count * sizeof(ex2::bbl_to_file_t) + sizeof(common::g_top_ten);
 
-			count = *(unsigned int*)p;
-			map_size += count * sizeof(ex2::bbl_to_file_t) + sizeof(common::g_top_ten);
+		if ((p = (char*)mmap(0, map_size, PROT_READ, MAP_SHARED, fd, 0)) == (caddr_t) -1) {std::cerr << "Error" << std::endl; return false;}
+		p += sizeof(count) + count * sizeof(ex2::bbl_to_file_t);
 
-			if ((p = (char*)mmap(0, map_size, PROT_READ, MAP_SHARED, fd, 0)) == (caddr_t) -1) {std::cerr << "Error" << std::endl; return;}
-			p += sizeof(count) + count * sizeof(ex2::bbl_to_file_t);
+		memcpy(common::g_top_ten, p, sizeof(common::g_top_ten));
 
-			memcpy(common::g_top_ten, p, sizeof(common::g_top_ten));
+		if (close(fd) < 0) {std::cerr << "Error" << std::endl; return false;}
 
-			if (close(fd) < 0) {std::cerr << "Error" << std::endl; return;}
-		}
+		return true;
 	}
 	
 #if 0
@@ -1057,7 +1057,7 @@ namespace ex3 {
 	/*****************************************/
 	/* find_candidate_rtns_for_translation() */
 	/*****************************************/
-	int find_candidate_rtns_for_translation(IMG img)
+	int find_candidate_rtns_for_translation(IMG img, unsigned int rtn_nums)
 	{
 		int rc;
 
@@ -1075,7 +1075,7 @@ namespace ex3 {
 				}
 				
 				bool is_top_ten = false;
-				for (unsigned int i = 0; i < common::TEN; ++i)
+				for (unsigned int i = 0; i < rtn_nums; ++i)
 					if (common::g_top_ten[i] == RTN_Address(rtn)) is_top_ten = true;
 				
 				if (!is_top_ten) continue;
@@ -1283,7 +1283,7 @@ namespace ex3 {
 		//cout << "after memory allocation" << endl;
 
 		// Step 2: go over all routines and identify candidate routines and copy their code into the instr map IR:
-		rc = find_candidate_rtns_for_translation(img);
+		rc = find_candidate_rtns_for_translation(img, common::TEN);
 		if (rc < 0)
 			return;
 
@@ -1328,8 +1328,38 @@ namespace ex3 {
 	}
 }
 
-KNOB<BOOL> KnobProf(KNOB_MODE_WRITEONCE, "pintool", "prof", "0", "generate profile");
+namespace ex4 {
+	VOID ImageLoad(IMG img, VOID *v)
+	{
+		// Step 0: Check the image and the CPU:
+		if (!IMG_IsMainExecutable(img))
+			return;
+
+		int rc = 0;
+
+		// step 1: Check size of executable sections and allocate required memory:
+		if ((rc = ex3::allocate_and_init_memory(img)) < 0) return;
+
+		// Step 2: go over all routines and identify candidate routines and copy their code into the instr map IR:
+		if ((rc = ex3::find_candidate_rtns_for_translation(img, 1)) < 0) return;
+
+		// Step 3: Chaining - calculate direct branch and call instructions to point to corresponding target instr entries:
+		if ((rc = ex3::chain_all_direct_br_and_call_target_entries()) < 0 ) return;
+
+		// Step 4: fix rip-based, direct branch and direct call displacements:
+		if ((rc = ex3::fix_instructions_displacements()) < 0 ) return;
+
+		// Step 5: write translated routines to new tc:
+		if ((rc = ex3::copy_instrs_to_tc()) < 0 ) return;
+
+		// Step 6: Commit the translated routines:
+		ex3::commit_translated_routines();
+	}
+}
+
+KNOB<BOOL> KnobProf(KNOB_MODE_WRITEONCE, "pintool", "prof" , "0", "generate profile");
 KNOB<BOOL> KnobInst(KNOB_MODE_WRITEONCE, "pintool", "inst" , "0", "instrument binary");
+KNOB<BOOL> KnobOpt (KNOB_MODE_WRITEONCE, "pintool", "opt"  , "0", "optimize");
 
 INT32 Usage()
 {
@@ -1341,7 +1371,8 @@ int main(int argc, char *argv[])
 {
 	PIN_InitSymbols();
 	if(PIN_Init(argc,argv)) return Usage();
-	if ((KnobProf && KnobInst) || (!KnobProf && !KnobInst)) return Usage();
+
+	if (!!KnobProf + !!KnobInst + !!KnobOpt != 1) return Usage();
 
 	if (KnobProf)
 	{
@@ -1354,8 +1385,15 @@ int main(int argc, char *argv[])
 
 	if (KnobInst)
 	{
-		ex3::read_top10("__profile.map");
+		if (!ex3::read_top10("__profile.map")) return 1;
 		IMG_AddInstrumentFunction(ex3::ImageLoad, 0);
+		PIN_StartProgramProbed();
+	}
+
+	if (KnobOpt)
+	{
+		if (!ex3::read_top10("__profile.map")) return 1;
+		IMG_AddInstrumentFunction(ex4::ImageLoad, 0);
 		PIN_StartProgramProbed();
 	}
 
