@@ -1543,13 +1543,60 @@ namespace ex4 {
 		if (!IMG_IsMainExecutable(img)) return;
 
 		ADDRINT top_addr = common::g_top_ten[0] - IMG_LowAddress(img);
+//asdasd
+		RTN top_rtn = RTN_FindByAddress(common::g_top_ten[0]);
+
+		std::map<ADDRINT, pair<USIZE, unsigned long> > my_bbls; // base -> (size, count)
+
+		RTN_Open(top_rtn);
+		INS ins= (RTN_InsHead(top_rtn));
+		my_bbls[INS_Address(ins)] = make_pair(0,0);
+		ADDRINT	rtn_base = RTN_Address(top_rtn);
+		USIZE rtn_size = RTN_Size(top_rtn);
+
+		for(; INS_Valid(ins); ins = INS_Next(ins) ) {
+			if(INS_IsDirectBranchOrCall(ins)) {
+				ADDRINT new_addr = INS_DirectBranchOrCallTargetAddress(ins);
+				if(new_addr >= INS_Address(RTN_InsHead(top_rtn)) && new_addr <= INS_Address(RTN_InsTail(top_rtn))) {
+					my_bbls[new_addr] = make_pair(0,0);
+				}
+				if(INS_Valid(INS_Next(ins))) {
+					my_bbls[INS_Address(INS_Next(ins))] = make_pair(0,0);
+				}
+			}
+		}
+		RTN_Close(top_rtn);
+		for(std::map<ADDRINT, pair<USIZE, unsigned long> >::iterator it = my_bbls.begin() ; it != my_bbls.end() ; ++it) {
+			std::map<ADDRINT, pair<USIZE, unsigned long> >::iterator it_next = it;
+			++it_next;
+			if(it_next != my_bbls.end()) {
+				it->second.first = (it_next->first) - (it->first);
+			} else {
+				it->second.first = rtn_base + rtn_size - (it->first);
+			}
+		}
+
 
 		for(ex2::g_bbl_map_t::iterator it = ex2::g_bbl_map.begin() ; it != ex2::g_bbl_map.end() ; ++it) {
-//			cout << "g_top_ten[0] = " <<  common::g_top_ten[0] << " it->second.rtn_addr = " << it->second.rtn_addr << endl;
+			//cout << "g_top_ten[0] = " <<  common::g_top_ten[0] << " it->second.rtn_addr = " << it->second.rtn_addr << endl;
 			if(it->second.rtn_addr != top_addr)
 				continue;
-			cout << "base: " << it->first.first << "size: " << it->first.second << endl;
+			
+			//cout << "base: " << it->first.first << " size: " << it->first.second << endl;
+//			std::map<ADDRINT, pair<USIZE, unsigned long> >::iterator low = std::lower_bound (my_bbls.begin(), my_bbls.end(), make_pair(it->first.first, make_pair(0, 0)));
+//			std::map<ADDRINT, pair<USIZE, unsigned long> >::iterator up = std::upper_bound (my_bbls.begin(), my_bbls.end(), make_pair(it->first.first + 1, make_pair(0, 0));
+			for(std::map<ADDRINT, pair<USIZE, unsigned long> >::iterator sub_it = my_bbls.begin() ; sub_it != my_bbls.end() ; ++sub_it) {
+				if(it->first.first + IMG_LowAddress(img) < sub_it->first || it->first.first + IMG_LowAddress(img) >= sub_it->first + sub_it->second.first) continue;
+				sub_it->second.second += (it->first.second) * (it->second.counter); // size * count
+			}
 		}
+		std::vector<pair<unsigned long, pair<ADDRINT, USIZE> > > sorted_bbls;
+		for(std::map<ADDRINT, pair<USIZE, unsigned long> >::iterator it = my_bbls.begin() ; it != my_bbls.end() ; ++it) {
+			sorted_bbls.push_back(make_pair(it->second.second, make_pair(it->first, it->second.first)));
+//			cout << "base: " << it->first << " size: " << it->second.first << " count: " << it->second.second << endl;
+		}
+
+		// TODO: sort the vector
 
 		// step 1: Check size of executable sections and allocate required memory:
 		if ((rc = allocate_and_init_memory(img)) < 0) return;
