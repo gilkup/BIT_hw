@@ -271,7 +271,7 @@ namespace ex2 {
 			INS last_ins = BBL_InsTail(bbl);
 
 			ADDRINT bbl_addr = BBL_Address(bbl);
-			USIZE bbl_size = BBL_Size(bbl) - INS_Size(last_ins);
+			USIZE bbl_size = BBL_Size(bbl);
 			bbl_key_t bbl_key = make_pair(bbl_addr, bbl_size);
 
 			RTN rtn = INS_Rtn(first_ins);
@@ -1451,42 +1451,42 @@ namespace ex4 {
 				bbls_order_t::const_iterator it = g_bbls_order.begin();
 				while (it != g_bbls_order.end())
 				{
-					//ADDRINT bbl_start_orig = *it + RTN_Address(rtn);
+					ADDRINT bbl_start_orig = *it + RTN_Address(rtn);
 					ADDRINT bbl_start_new  = g_new_bbls[*it].new_addr + function_base_tc;
 					while ((ADDRINT)&g_tc[g_tc_cursor] < bbl_start_new)
 					{
 						if (add_new_instr_entry(&xedd_nop, 0, 1) < 0) {
 							cerr << "ERROR: failed during instructon translation." << endl;
 							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
-							break;
+							return -1;
 						}
 					}
 
 					for (USIZE i = 0; i < g_new_bbls[*it].orig_size;)
 					{
-						ADDRINT addr = *it + i;
+						ADDRINT addr = bbl_start_orig + i;
 
 						xed_decoded_inst_t xedd;
 						xed_error_enum_t xed_code;
-
 						xed_decoded_inst_zero_set_mode(&xedd,&g_dstate);
 
 						xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(addr), g_max_inst_len);
 						if (xed_code != XED_ERROR_NONE) {
 							cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
 							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
-							break;
+							return -1;
 						}
 
+						USIZE ins_orig_size = xed_decoded_inst_get_length(&xedd);
 						// Add instr into instr map:
-						rc = add_new_instr_entry(&xedd, addr, xed_decoded_inst_get_length(&xedd));
+						rc = add_new_instr_entry(&xedd, addr, ins_orig_size);
 						if (rc < 0) {
 							cerr << "ERROR: failed during instructon translation." << endl;
 							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
-							break;
+							return rc;
 						}
 
-						i += rc;
+						i += ins_orig_size;
 					}
 
 					if (g_instr_map[g_num_of_instr_map_entries].orig_targ_addr)
@@ -1511,7 +1511,7 @@ namespace ex4 {
 						if (xed_code != XED_ERROR_NONE) {
 							cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << 0 << endl;
 							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
-							break;
+							return -1;
 						}
 
 						// Add instr into instr map:
@@ -1519,7 +1519,7 @@ namespace ex4 {
 						if (rc < 0) {
 							cerr << "ERROR: failed during instructon translation." << endl;
 							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
-							break;
+							return rc;
 						}
 
 					}
