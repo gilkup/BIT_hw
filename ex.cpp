@@ -209,6 +209,60 @@ namespace ex2 {
 		if (close(fd) < 0) {std::cerr << "Error" << std::endl; return;}
 	}
 
+	
+	void read_file(const std::string &file_name)
+	{
+		int fd;
+		char *buff, *p;
+		unsigned int count = 0, map_size = 0;
+
+		if ((fd = open(file_name.c_str(), O_RDONLY)) >= 0) { //read file
+
+			map_size = sizeof(count);
+			if ((p = buff = (char*)mmap(0, map_size, PROT_READ, MAP_SHARED, fd, 0)) == (caddr_t) -1) {std::cerr << "Error" << std::endl; return;}
+
+			count = *(unsigned int*)p;
+			map_size += count * sizeof(bbl_to_file_t);
+
+			if ((p = buff = (char*)mmap(0, map_size, PROT_READ, MAP_SHARED, fd, 0)) == (caddr_t) -1) {std::cerr << "Error" << std::endl; return;}
+			p += sizeof(count);
+
+			for (unsigned int i = 0; i < count; ++i) {
+				bbl_to_file_t *bbl = (bbl_to_file_t*)p;
+				p += sizeof (*bbl);
+
+				ADDRINT img_addr = g_img_map[bbl->img_name];
+
+				bbl_val_t &bbl_val = g_bbl_map[std::make_pair(bbl->first_ins + img_addr, bbl->size)];
+
+				bbl_val.counter += bbl->counter;
+				bbl_val.rtn_addr = bbl->rtn_addr + img_addr;
+				bbl_val.img_name = std::string(bbl->img_name);
+				bbl_val.img_addr = img_addr;
+				bbl_val.target[0] = bbl->target[0] + img_addr;
+				bbl_val.target[1] = bbl->target[1] + img_addr;
+
+				for (unsigned int j = 0; j < MAX_EDGES; ++j) {
+					ADDRINT bbl_addr = bbl->target_count[j].addr;
+					USIZE bbl_size = bbl->target_count[j].size;
+					unsigned int count = bbl->target_count[j].count;
+
+					if (count)
+						bbl_val.target_count[make_pair(bbl_addr, bbl_size)] += count;
+				}
+
+				RTN rtn = RTN_FindByAddress(bbl_val.rtn_addr);
+				if (RTN_Valid(rtn)) bbl_val.rtn_name = std::string(RTN_Name(rtn));
+			}
+
+			if (close(fd) < 0) {std::cerr << "Error" << std::endl; return;}
+		} else {
+			cout << "ERROR!!!!!!!!!!!" << endl;
+		}
+	}
+
+
+
 	VOID Trace(TRACE trace, VOID *v)
 	{
 		for (BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl))
@@ -1351,6 +1405,7 @@ namespace ex4 {
 	bbls_order_t g_bbls_order;
 	new_bbls_t g_new_bbls;
 
+
 	/*****************************************/
 	/* find_candidate_rtns_for_translation() */
 	/*****************************************/
@@ -1487,6 +1542,15 @@ namespace ex4 {
 		// Step 0: Check the image and the CPU:
 		if (!IMG_IsMainExecutable(img)) return;
 
+		ADDRINT top_addr = common::g_top_ten[0] - IMG_LowAddress(img);
+
+		for(ex2::g_bbl_map_t::iterator it = ex2::g_bbl_map.begin() ; it != ex2::g_bbl_map.end() ; ++it) {
+//			cout << "g_top_ten[0] = " <<  common::g_top_ten[0] << " it->second.rtn_addr = " << it->second.rtn_addr << endl;
+			if(it->second.rtn_addr != top_addr)
+				continue;
+			cout << "base: " << it->first.first << "size: " << it->first.second << endl;
+		}
+
 		// step 1: Check size of executable sections and allocate required memory:
 		if ((rc = allocate_and_init_memory(img)) < 0) return;
 
@@ -1547,7 +1611,8 @@ int main(int argc, char *argv[])
 		if (xed_decode(&ex4::xedd_nop, reinterpret_cast<UINT8*>(&ex4::NOP), 1) != XED_ERROR_NONE) return 1;
 
 		if (!ex3::read_top10("__profile.map")) return 1;
-		ex2::update_file("__profile.map");
+		ex2::read_file("__profile.map");
+
 		IMG_AddInstrumentFunction(ex4::ImageLoad, 0);
 		PIN_StartProgramProbed();
 	}
