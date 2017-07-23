@@ -1535,6 +1535,36 @@ namespace ex4 {
 		return 0;
 	}
 
+	struct reorder_bbls_s {
+		unsigned long count;
+		ADDRINT base;
+		ADDRINT newbase;
+		USIZE size;
+		int i;
+                bool operator<(const struct reorder_bbls_s& b) const {
+                        if(this->count > b.count) return true;
+                        if(this->count < b.count) return false;
+                        if(this->base > b.base) return true;
+                        if(this->base < b.base) return false;
+                        if(this->size > b.size) return true;
+                        if(this->size < b.size) return false;
+                        return(this->i > b.i);
+                }
+
+	};
+/*
+        struct compare_reorder_bbls_s{
+                bool operator()(const struct reorder_bbls_s& a, const struct reorder_bbls_s& b) const {
+	                if(a.count < b.count) return true;
+	       	       	if(a.count > b.count) return false;
+       		        if(a.base < b.base) return true;
+	                if(a.base > b.base) return false;
+	                if(a.size < b.size) return true;
+        	        if(a.size > b.size) return false;
+	                return(a.i < b.i);
+                }
+        };
+*/
 	VOID ImageLoad(IMG img, VOID *v)
 	{
 		int rc = 0;
@@ -1590,13 +1620,35 @@ namespace ex4 {
 				sub_it->second.second += (it->first.second) * (it->second.counter); // size * count
 			}
 		}
-		std::vector<pair<unsigned long, pair<ADDRINT, USIZE> > > sorted_bbls;
+		ofstream myfile;
+		myfile.open ("fallbackSort-output.txt");
+		myfile << "Original order of basic blocks in fallbackSort:" << endl;
+		std::vector<struct reorder_bbls_s> unsorted_bbls;
+		int i = 0;
 		for(std::map<ADDRINT, pair<USIZE, unsigned long> >::iterator it = my_bbls.begin() ; it != my_bbls.end() ; ++it) {
-			sorted_bbls.push_back(make_pair(it->second.second, make_pair(it->first, it->second.first)));
+			struct reorder_bbls_s item;
+			item.i = i;
+			item.base = it->first;
+			item.size = it->second.first;
+			item.count = it->second.second;
+			unsorted_bbls.push_back(item);
+			myfile << "BB" << i << ": " << std::hex << it->first << "-" << it->first + it->second.first << std::dec << " " << it->second.second << endl;
+			i++;
 //			cout << "base: " << it->first << " size: " << it->second.first << " count: " << it->second.second << endl;
 		}
-
-		// TODO: sort the vector
+		std::vector<struct reorder_bbls_s> sorted_bbls = unsorted_bbls;
+		std::vector<struct reorder_bbls_s>::iterator ffiirrsstt = sorted_bbls.begin();
+		sort(++ffiirrsstt, sorted_bbls.end());
+		int j = 0;
+		ADDRINT newbase = sorted_bbls.begin()->base;
+		myfile << "New order of basic blocks in fallbackSort:" << endl;
+		for(std::vector<struct reorder_bbls_s>::iterator it = sorted_bbls.begin() ; it != sorted_bbls.end() ; ++it) {
+			myfile << "BB" << j << ": " << std::hex << it->base << "-" << newbase << std::dec << endl;
+			j++;
+			newbase += it->size + 5;
+			it->base -= IMG_LowAddress(img);
+		}
+		//Gil: take here the vector sorted_bbls. Just make it global
 
 		// step 1: Check size of executable sections and allocate required memory:
 		if ((rc = allocate_and_init_memory(img)) < 0) return;
