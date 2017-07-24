@@ -1469,6 +1469,7 @@ namespace ex4 {
 
 std::cerr << 1 << std::endl;
 
+					//unsigned size_change = 0;
 					for (USIZE i = 0; i < g_new_bbls[*it].orig_size;)
 					{
 						ADDRINT addr = bbl_start_orig + i;
@@ -1492,12 +1493,12 @@ std::cerr << 1 << std::endl;
 							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
 							return rc;
 						}
-
+						
 						i += ins_orig_size;
 					}
 std::cerr << 2 << std::endl;
 
-					ADDRINT &orig_targ_addr = g_instr_map[g_num_of_instr_map_entries].orig_targ_addr; 
+					ADDRINT &orig_targ_addr = g_instr_map[g_num_of_instr_map_entries-1].orig_targ_addr; 
 					if (orig_targ_addr)
 					//if (orig_targ_addr && orig_targ_addr >= RTN_Address(rtn) && orig_targ_addr < RTN_Address(rtn) + RTN_Size(rtn))
 					{
@@ -1511,24 +1512,23 @@ std::cerr << 2 << std::endl;
 					}
 
 std::cerr << 3 << std::endl;
-
+						
 						unsigned char jmp[5] = {0xe9, 0, 0, 0, 0};
-						unsigned long jump = 0xe9;
-						ADDRINT loc = g_new_bbls[*it + g_new_bbls[*it].orig_size].new_addr + function_base_tc - (ADDRINT)&g_tc[g_tc_cursor] - 5;
+						//std::cerr << "*it + g_new_bbls[*it].orig_size=0x" << hex << *it + g_new_bbls[*it].orig_size << endl;
+						//std::cerr << "g_new_bbls[*it + g_new_bbls[*it].orig_size].new_addr=0x" << hex << g_new_bbls[*it + g_new_bbls[*it].orig_size].new_addr << endl;
+						//std::cerr << "((ADDRINT)&g_tc[g_tc_cursor] - function_base_tc)=" << hex << ((ADDRINT)&g_tc[g_tc_cursor] - function_base_tc) << dec << endl;
+						//ADDRINT loc = g_new_bbls[*it + g_new_bbls[*it].orig_size].new_addr - 
+						//				(g_new_bbls[*it].new_addr + g_new_bbls[*it].new_size - 5) ;
+						//ADDRINT loc = (g_new_bbls[*it + g_new_bbls[*it].orig_size].new_addr) - (g_new_bbls[*it].new_addr + g_new_bbls[*it].new_size);
+						ADDRINT loc = g_new_bbls[*it + g_new_bbls[*it].orig_size].new_addr - (ADDRINT)&g_tc[g_tc_cursor] ;
 						memcpy(jmp + 1, &loc, 4);
-					cout << "function_base_tc  " << function_base_tc << endl;
-					cout << " (ADDRINT)&g_tc[g_tc_cursor] " << (ADDRINT)&g_tc[g_tc_cursor] << endl;
-					cout << "aaaaaaaaaaaaaaaaaaaa " << dec << loc << endl;
-					for(int k = 0 ; k < 5 ; k ++) {
-						fprintf(stderr, "%x ", jmp[k] & 0xff);
-					}printf("\n");
 
 						xed_decoded_inst_t xedd;
 						xed_error_enum_t xed_code;
 
 						xed_decoded_inst_zero_set_mode(&xedd,&g_dstate);
 
-						xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(&jump), g_max_inst_len);
+						xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(&jmp), g_max_inst_len);
 						if (xed_code != XED_ERROR_NONE) {
 							cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << 0 << endl;
 							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
@@ -1537,16 +1537,19 @@ std::cerr << 3 << std::endl;
 
 						// Add instr into instr map:
 						cout << "xed_decoded_inst_get_length(&xedd) " << xed_decoded_inst_get_length(&xedd) << endl;
-						rc = add_new_instr_entry(&xedd, 0, xed_decoded_inst_get_length(&xedd));
+						rc = add_new_instr_entry(&xedd, (ADDRINT)&g_tc[g_tc_cursor], xed_decoded_inst_get_length(&xedd));
 						if (rc < 0) {
 							cerr << "ERROR: failed during instructon translation." << endl;
 							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
 							return rc;
 						}
 
-						g_instr_map[g_num_of_instr_map_entries - 1].orig_targ_addr = loc + function_base_tc + 5;
-
-						while ((ADDRINT)&g_tc[g_tc_cursor] < bbl_start_new + g_new_bbls[*it].new_size)
+						//g_instr_map[g_num_of_instr_map_entries - 1].orig_targ_addr = 0;//loc + function_base_tc + 5;
+						//g_instr_map[g_num_of_instr_map_entries - 1].orig_targ_addr = g_new_bbls[*it + g_new_bbls[*it].orig_size].new_addr + 1 + function_base_tc;
+/*
+						std::cerr << "size_change=" << size_change << endl;
+						while ((ADDRINT)&g_tc[g_tc_cursor] < 
+							bbl_start_new + g_new_bbls[*it].new_size - size_change)
 						{
 							std::cerr << "gilkup: add nop 2" << std::endl;
 							if (add_new_instr_entry(&xedd_nop, 0, 1) < 0) {
@@ -1555,6 +1558,7 @@ std::cerr << 3 << std::endl;
 								return -1;
 							}
 						}
+	*/					
 std::cerr << 31 << std::endl;
 					++it;
 
@@ -1680,8 +1684,8 @@ std::cerr << 4 << std::endl;
 			g_new_bbls[it->base].orig_size = it->size;
 			g_new_bbls[it->base].new_size = it->size + 15;
 			g_new_bbls[it->base].new_addr = it->newbase;
-			cout << " it->newbase: " <<  it->newbase << endl;
 			g_bbls_order.push_back(it->base);
+			std::cerr << "g_new_bbls[" << it->base << "].new_addr = " << it->newbase << endl;
 		}
 		//Gil: take here the vector sorted_bbls. Just make it global
 
