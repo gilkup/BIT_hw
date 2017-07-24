@@ -1640,13 +1640,14 @@ namespace ex4 {
 		std::vector<struct reorder_bbls_s>::iterator ffiirrsstt = sorted_bbls.begin();
 		sort(++ffiirrsstt, sorted_bbls.end());
 		int j = 0;
-		ADDRINT newbase = sorted_bbls.begin()->base;
+		ADDRINT newbase = 0; //sorted_bbls.begin()->base;
 		myfile << "New order of basic blocks in fallbackSort:" << endl;
 		for(std::vector<struct reorder_bbls_s>::iterator it = sorted_bbls.begin() ; it != sorted_bbls.end() ; ++it) {
+			it->base -= common::g_top_ten[0];
 			myfile << "BB" << j << ": " << std::hex << it->base << "-" << newbase << std::dec << endl;
 			j++;
 			newbase += it->size + 5;
-			it->base -= IMG_LowAddress(img);
+			it->newbase -= common::g_top_ten[0];
 		}
 		//Gil: take here the vector sorted_bbls. Just make it global
 
