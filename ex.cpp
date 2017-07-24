@@ -1552,19 +1552,7 @@ namespace ex4 {
                 }
 
 	};
-/*
-        struct compare_reorder_bbls_s{
-                bool operator()(const struct reorder_bbls_s& a, const struct reorder_bbls_s& b) const {
-	                if(a.count < b.count) return true;
-	       	       	if(a.count > b.count) return false;
-       		        if(a.base < b.base) return true;
-	                if(a.base > b.base) return false;
-	                if(a.size < b.size) return true;
-        	        if(a.size > b.size) return false;
-	                return(a.i < b.i);
-                }
-        };
-*/
+
 	VOID ImageLoad(IMG img, VOID *v)
 	{
 		int rc = 0;
@@ -1648,6 +1636,13 @@ namespace ex4 {
 			j++;
 			newbase += it->size + 5;
 			it->newbase -= common::g_top_ten[0];
+		}
+
+		for(std::vector<struct reorder_bbls_s>::iterator it = sorted_bbls.begin() ; it != sorted_bbls.end() ; ++it) {
+			g_new_bbls[it->base].orig_size = it->size;
+			g_new_bbls[it->base].new_size = it->size + 5;
+			g_new_bbls[it->base].new_addr = it->newbase;
+			g_bbls_order.push_back(it->base);
 		}
 		//Gil: take here the vector sorted_bbls. Just make it global
 
