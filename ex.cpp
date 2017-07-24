@@ -1453,14 +1453,21 @@ namespace ex4 {
 				{
 					ADDRINT bbl_start_orig = *it + RTN_Address(rtn);
 					ADDRINT bbl_start_new  = g_new_bbls[*it].new_addr + function_base_tc;
+					cout << std::hex << "g_new_bbls[*it].new_addr " << g_new_bbls[*it].new_addr << endl;
+					cout << std::hex << "bbl_start_orig " << bbl_start_orig << endl;
+					cout << "bbl_start_new " << bbl_start_new << endl;
+					cout << "((ADDRINT)&g_tc[g_tc_cursor]" << (ADDRINT)&g_tc[g_tc_cursor] << std::dec<< endl;
 					while ((ADDRINT)&g_tc[g_tc_cursor] < bbl_start_new)
 					{
+						std::cerr << "gilkup: add nop 1" << std::endl;
 						if (add_new_instr_entry(&xedd_nop, 0, 1) < 0) {
 							cerr << "ERROR: failed during instructon translation." << endl;
 							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
 							return -1;
 						}
 					}
+
+std::cerr << 1 << std::endl;
 
 					for (USIZE i = 0; i < g_new_bbls[*it].orig_size;)
 					{
@@ -1488,26 +1495,40 @@ namespace ex4 {
 
 						i += ins_orig_size;
 					}
+std::cerr << 2 << std::endl;
 
-					if (g_instr_map[g_num_of_instr_map_entries].orig_targ_addr)
+					ADDRINT &orig_targ_addr = g_instr_map[g_num_of_instr_map_entries].orig_targ_addr; 
+					if (orig_targ_addr)
+					//if (orig_targ_addr && orig_targ_addr >= RTN_Address(rtn) && orig_targ_addr < RTN_Address(rtn) + RTN_Size(rtn))
 					{
-						ADDRINT orig_offset = g_instr_map[g_num_of_instr_map_entries].orig_targ_addr - RTN_Address(rtn);
-						g_instr_map[g_num_of_instr_map_entries].orig_targ_addr = g_new_bbls[orig_offset].new_addr + function_base_tc;
-						
+						std::cerr << "before: " << "orig_targ_addr=" << orig_targ_addr << std::endl;
+
+                                                ADDRINT orig_offset = orig_targ_addr - RTN_Address(rtn);
+                                                orig_targ_addr = g_new_bbls[orig_offset].new_addr + function_base_tc;
+
+
+						std::cerr << "after: " << "orig_targ_addr=" << orig_targ_addr << std::endl;
 					}
 
-					if ((++it) != g_bbls_order.end())
-					{
+std::cerr << 3 << std::endl;
+
 						unsigned char jmp[5] = {0xe9, 0, 0, 0, 0};
-						ADDRINT loc = g_new_bbls[*it].new_addr - (ADDRINT)&g_tc[g_tc_cursor] - 5;
+						unsigned long jump = 0xe9;
+						ADDRINT loc = g_new_bbls[*it + g_new_bbls[*it].orig_size].new_addr + function_base_tc - (ADDRINT)&g_tc[g_tc_cursor] - 5;
 						memcpy(jmp + 1, &loc, 4);
+					cout << "function_base_tc  " << function_base_tc << endl;
+					cout << " (ADDRINT)&g_tc[g_tc_cursor] " << (ADDRINT)&g_tc[g_tc_cursor] << endl;
+					cout << "aaaaaaaaaaaaaaaaaaaa " << dec << loc << endl;
+					for(int k = 0 ; k < 5 ; k ++) {
+						fprintf(stderr, "%x ", jmp[k] & 0xff);
+					}printf("\n");
 
 						xed_decoded_inst_t xedd;
 						xed_error_enum_t xed_code;
 
 						xed_decoded_inst_zero_set_mode(&xedd,&g_dstate);
 
-						xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(&jmp), g_max_inst_len);
+						xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(&jump), g_max_inst_len);
 						if (xed_code != XED_ERROR_NONE) {
 							cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << 0 << endl;
 							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
@@ -1515,6 +1536,7 @@ namespace ex4 {
 						}
 
 						// Add instr into instr map:
+						cout << "xed_decoded_inst_get_length(&xedd) " << xed_decoded_inst_get_length(&xedd) << endl;
 						rc = add_new_instr_entry(&xedd, 0, xed_decoded_inst_get_length(&xedd));
 						if (rc < 0) {
 							cerr << "ERROR: failed during instructon translation." << endl;
@@ -1522,13 +1544,28 @@ namespace ex4 {
 							return rc;
 						}
 
-					}
+						g_instr_map[g_num_of_instr_map_entries - 1].orig_targ_addr = loc + function_base_tc + 5;
+
+						while ((ADDRINT)&g_tc[g_tc_cursor] < bbl_start_new + g_new_bbls[*it].new_size)
+						{
+							std::cerr << "gilkup: add nop 2" << std::endl;
+							if (add_new_instr_entry(&xedd_nop, 0, 1) < 0) {
+								cerr << "ERROR: failed during instructon translation." << endl;
+								g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
+								return -1;
+							}
+						}
+std::cerr << 31 << std::endl;
+					++it;
+
+std::cerr << 4 << std::endl;
 				}
 
 				// Close the RTN.
 				RTN_Close( rtn );
 
 				g_translated_rtn_num++;
+				return 0;
 			 } // end for RTN..
 		} // end for SEC...
 
@@ -1634,14 +1671,16 @@ namespace ex4 {
 			it->base -= common::g_top_ten[0];
 			myfile << "BB" << j << ": " << std::hex << it->base << "-" << newbase << std::dec << endl;
 			j++;
-			newbase += it->size + 5;
-			it->newbase -= common::g_top_ten[0];
+			it->newbase = newbase;
+			newbase += it->size + 15;
+			//it->newbase -= common::g_top_ten[0];
 		}
 
 		for(std::vector<struct reorder_bbls_s>::iterator it = sorted_bbls.begin() ; it != sorted_bbls.end() ; ++it) {
 			g_new_bbls[it->base].orig_size = it->size;
-			g_new_bbls[it->base].new_size = it->size + 5;
+			g_new_bbls[it->base].new_size = it->size + 15;
 			g_new_bbls[it->base].new_addr = it->newbase;
+			cout << " it->newbase: " <<  it->newbase << endl;
 			g_bbls_order.push_back(it->base);
 		}
 		//Gil: take here the vector sorted_bbls. Just make it global
@@ -1663,6 +1702,11 @@ namespace ex4 {
 
 		// Step 6: Commit the translated routines:
 		commit_translated_routines();
+
+
+		std::ofstream gil("gil");
+		for (int i = 0; i < g_tc_cursor; ++i)
+			gil << std::hex << (char)g_tc[i] << std::dec;
 	}
 }
 
