@@ -698,8 +698,12 @@ namespace ex3_4 {
 		xed_int32_t disp;
 
 		if (disp_byts > 0) { // there is a branch offset.
+//printf("222111 %x %x %x %x %x\n", xed_decoded_inst_get_byte (xedd, 0), xed_decoded_inst_get_byte (xedd, 1), xed_decoded_inst_get_byte (xedd, 2), xed_decoded_inst_get_byte (xedd, 3), xed_decoded_inst_get_byte (xedd, 4));
+
 		  disp = xed_decoded_inst_get_branch_displacement(xedd);
+//			cout << "6666666666666666666 disp = " << disp << endl;
 		  orig_targ_addr = pc + xed_decoded_inst_get_length (xedd) + disp;
+//			cout << "7777777777777777777 orig_targ_addr = " << orig_targ_addr << endl;
 		}
 
 		// Converts the decoder request to a valid encoder request:
@@ -714,6 +718,10 @@ namespace ex3_4 {
 		}
 
 		// add a new entry in the instr_map:
+		if (disp_byts > 0) {
+			cout << "orig_ins_addr " << pc << endl;
+			cout << "orig_targ_addr " << orig_targ_addr << endl;
+		}
 		g_instr_map[g_num_of_instr_map_entries].orig_ins_addr = pc;
 		g_instr_map[g_num_of_instr_map_entries].new_ins_addr = (ADDRINT)&g_tc[g_tc_cursor];  // set an initial estimated addr in tc
 		g_instr_map[g_num_of_instr_map_entries].orig_targ_addr = orig_targ_addr;
@@ -1453,13 +1461,13 @@ namespace ex4 {
 				{
 					ADDRINT bbl_start_orig = *it + RTN_Address(rtn);
 					ADDRINT bbl_start_new  = g_new_bbls[*it].new_addr + function_base_tc;
-					cout << std::hex << "g_new_bbls[*it].new_addr " << g_new_bbls[*it].new_addr << endl;
-					cout << std::hex << "bbl_start_orig " << bbl_start_orig << endl;
-					cout << "bbl_start_new " << bbl_start_new << endl;
-					cout << "((ADDRINT)&g_tc[g_tc_cursor]" << (ADDRINT)&g_tc[g_tc_cursor] << std::dec<< endl;
+//					cout << std::hex << "g_new_bbls[*it].new_addr " << g_new_bbls[*it].new_addr << endl;
+//					cout << std::hex << "bbl_start_orig " << bbl_start_orig << endl;
+//					cout << "bbl_start_new " << bbl_start_new << endl;
+//					cout << "((ADDRINT)&g_tc[g_tc_cursor]" << (ADDRINT)&g_tc[g_tc_cursor] << std::dec<< endl;
 					while ((ADDRINT)&g_tc[g_tc_cursor] < bbl_start_new)
 					{
-						std::cerr << "gilkup: add nop 1" << std::endl;
+					//	std::cerr << "gilkup: add nop 1" << std::endl;
 						if (add_new_instr_entry(&xedd_nop, 0, 1) < 0) {
 							cerr << "ERROR: failed during instructon translation." << endl;
 							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
@@ -1501,34 +1509,36 @@ std::cerr << 2 << std::endl;
 					if (orig_targ_addr)
 					//if (orig_targ_addr && orig_targ_addr >= RTN_Address(rtn) && orig_targ_addr < RTN_Address(rtn) + RTN_Size(rtn))
 					{
-						std::cerr << "before: " << "orig_targ_addr=" << orig_targ_addr << std::endl;
+//						std::cerr << "before: " << "orig_targ_addr=" << orig_targ_addr << std::endl;
 
                                                 ADDRINT orig_offset = orig_targ_addr - RTN_Address(rtn);
                                                 orig_targ_addr = g_new_bbls[orig_offset].new_addr + function_base_tc;
 
 
-						std::cerr << "after: " << "orig_targ_addr=" << orig_targ_addr << std::endl;
+//						std::cerr << "after: " << "orig_targ_addr=" << orig_targ_addr << std::endl;
 					}
 
-std::cerr << 3 << std::endl;
+//std::cerr << 3 << std::endl;
 
 						unsigned char jmp[5] = {0xe9, 0, 0, 0, 0};
-						unsigned long jump = 0xe9;
-						ADDRINT loc = g_new_bbls[*it + g_new_bbls[*it].orig_size].new_addr + function_base_tc - (ADDRINT)&g_tc[g_tc_cursor] - 5;
+						//unsigned long jump = 0xe9;
+						//ADDRINT loc = g_new_bbls[*it + g_new_bbls[*it].orig_size].new_addr + function_base_tc - (ADDRINT)&g_tc[g_tc_cursor] - 5;
+						
+						ADDRINT loc = (g_new_bbls[*it + g_new_bbls[*it].orig_size].new_addr) - (g_new_bbls[*it].new_addr + g_new_bbls[*it].new_size);
 						memcpy(jmp + 1, &loc, 4);
-					cout << "function_base_tc  " << function_base_tc << endl;
-					cout << " (ADDRINT)&g_tc[g_tc_cursor] " << (ADDRINT)&g_tc[g_tc_cursor] << endl;
-					cout << "aaaaaaaaaaaaaaaaaaaa " << dec << loc << endl;
-					for(int k = 0 ; k < 5 ; k ++) {
-						fprintf(stderr, "%x ", jmp[k] & 0xff);
-					}printf("\n");
+//					cout << "function_base_tc  " << function_base_tc << endl;
+//					cout << " (ADDRINT)&g_tc[g_tc_cursor] " << (ADDRINT)&g_tc[g_tc_cursor] << endl;
+//					cout << "aaaaaaaaaaaaaaaaaaaa " << dec << loc << endl;
+//					for(int k = 0 ; k < 5 ; k ++) {
+//						fprintf(stderr, "%x ", jmp[k] & 0xff);
+//					}printf("\n");
 
 						xed_decoded_inst_t xedd;
 						xed_error_enum_t xed_code;
 
 						xed_decoded_inst_zero_set_mode(&xedd,&g_dstate);
 
-						xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(&jump), g_max_inst_len);
+						xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(jmp), g_max_inst_len);
 						if (xed_code != XED_ERROR_NONE) {
 							cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << 0 << endl;
 							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
@@ -1536,8 +1546,10 @@ std::cerr << 3 << std::endl;
 						}
 
 						// Add instr into instr map:
-						cout << "xed_decoded_inst_get_length(&xedd) " << xed_decoded_inst_get_length(&xedd) << endl;
-						rc = add_new_instr_entry(&xedd, 0, xed_decoded_inst_get_length(&xedd));
+	//					cout << "xed_decoded_inst_get_length(&xedd) " << xed_decoded_inst_get_length(&xedd) << endl;
+	//					printf("1111111 %x %x %x %x %x\n", xed_decoded_inst_get_byte (&xedd, 0), xed_decoded_inst_get_byte (&xedd, 1), xed_decoded_inst_get_byte (&xedd, 2), xed_decoded_inst_get_byte (&xedd, 3), xed_decoded_inst_get_byte (&xedd, 4));
+						cout << "*it = " << *it << endl;
+						rc = add_new_instr_entry(&xedd, g_new_bbls[*it].new_addr + g_new_bbls[*it].new_size + (ADDRINT)g_tc, xed_decoded_inst_get_length(&xedd));
 						if (rc < 0) {
 							cerr << "ERROR: failed during instructon translation." << endl;
 							g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
@@ -1548,17 +1560,17 @@ std::cerr << 3 << std::endl;
 
 						while ((ADDRINT)&g_tc[g_tc_cursor] < bbl_start_new + g_new_bbls[*it].new_size)
 						{
-							std::cerr << "gilkup: add nop 2" << std::endl;
+		//					std::cerr << "gilkup: add nop 2" << std::endl;
 							if (add_new_instr_entry(&xedd_nop, 0, 1) < 0) {
 								cerr << "ERROR: failed during instructon translation." << endl;
 								g_translated_rtn[g_translated_rtn_num].instr_map_entry = -1;
 								return -1;
 							}
 						}
-std::cerr << 31 << std::endl;
+//std::cerr << 31 << std::endl;
 					++it;
 
-std::cerr << 4 << std::endl;
+//std::cerr << 4 << std::endl;
 				}
 
 				// Close the RTN.
@@ -1680,7 +1692,7 @@ std::cerr << 4 << std::endl;
 			g_new_bbls[it->base].orig_size = it->size;
 			g_new_bbls[it->base].new_size = it->size + 15;
 			g_new_bbls[it->base].new_addr = it->newbase;
-			cout << " it->newbase: " <<  it->newbase << endl;
+//			cout << " it->newbase: " <<  it->newbase << endl;
 			g_bbls_order.push_back(it->base);
 		}
 		//Gil: take here the vector sorted_bbls. Just make it global
