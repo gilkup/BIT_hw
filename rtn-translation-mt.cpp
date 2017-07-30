@@ -146,6 +146,9 @@ int translated_rtn_num = 0;
 // commit/uncommit thread-related variables:
 volatile bool enable_commit_uncommit_flag = false;
 
+const char ins_call_prologure[] = {
+#include "ins_call.bin.parsed"
+};
 
 /* ============================================================= */
 /* Service dump routines                                         */
@@ -267,31 +270,31 @@ void dump_instr_map_entry(int instr_map_entry)
 /*************/
 void dump_tc()
 {
-  char disasm_buf[2048];
-  xed_decoded_inst_t new_xedd;
-  ADDRINT address = (ADDRINT)&tc[0];
-  unsigned int size = 0;
+	char disasm_buf[2048];
+	xed_decoded_inst_t new_xedd;
+	ADDRINT address = (ADDRINT)&tc[0];
+	unsigned int size = 0;
 
-  while (address < (ADDRINT)&tc[tc_cursor]) {
+	while (address < (ADDRINT)&tc[tc_cursor]) {
 
-      address += size;
+		address += size;
 
-	  xed_decoded_inst_zero_set_mode(&new_xedd,&dstate); 
+		xed_decoded_inst_zero_set_mode(&new_xedd,&dstate); 
    
-	  xed_error_enum_t xed_code = xed_decode(&new_xedd, reinterpret_cast<UINT8*>(address), max_inst_len);				   
+		xed_error_enum_t xed_code = xed_decode(&new_xedd, reinterpret_cast<UINT8*>(address), max_inst_len);				   
 
-	  BOOL xed_ok = (xed_code == XED_ERROR_NONE);
-	  if (!xed_ok){
-		  cerr << "invalid opcode" << endl;
-		  return;
-	  }
+		BOOL xed_ok = (xed_code == XED_ERROR_NONE);
+		if (!xed_ok){
+			cerr << "invalid opcode" << endl;
+			return;
+		}
  
-	  xed_format_context(XED_SYNTAX_INTEL, &new_xedd, disasm_buf, 2048, static_cast<UINT64>(address), 0, 0);
+		xed_format_context(XED_SYNTAX_INTEL, &new_xedd, disasm_buf, 2048, static_cast<UINT64>(address), 0, 0);
 
-	  cerr << "0x" << hex << address << ": " << disasm_buf <<  endl;
+		cerr << "0x" << hex << address << ": " << disasm_buf <<  endl;
 
-	  size = xed_decoded_inst_get_length (&new_xedd);	
-  }
+		size = xed_decoded_inst_get_length (&new_xedd);	
+	}
 }
 
 
@@ -363,6 +366,72 @@ int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, unsigned int size)
 
 	return new_size;
 }
+
+
+/*************************/
+/* add_ins_call_prologue() */
+/*************************/
+int add_ins_call_prologue()
+{
+
+	// copy orig instr to instr map:
+	ADDRINT orig_targ_addr = 0;
+
+	if (xed_decoded_inst_get_length (xedd) != size) {
+		cerr << "Invalid instruction decoding" << endl;
+		return -1;
+	}
+
+	xed_uint_t disp_byts = xed_decoded_inst_get_branch_displacement_width(xedd);
+	
+	xed_int32_t disp;
+
+	if (disp_byts > 0) { // there is a branch offset.
+	disp = xed_decoded_inst_get_branch_displacement(xedd);
+		orig_targ_addr = pc + xed_decoded_inst_get_length (xedd) + disp;	
+	}
+
+	// Converts the decoder request to a valid encoder request:
+	xed_encoder_request_init_from_decode (xedd);
+
+	unsigned int new_size = 0;
+	
+	xed_error_enum_t xed_error = xed_encode (xedd, reinterpret_cast<UINT8*>(instr_map[num_of_instr_map_entries].encoded_ins), max_inst_len , &new_size);
+	if (xed_error != XED_ERROR_NONE) {
+		cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;		
+		return -1;
+	}	
+	
+	// add a new entry in the instr_map:
+	
+	instr_map[num_of_instr_map_entries].orig_ins_addr = pc;
+	instr_map[num_of_instr_map_entries].new_ins_addr = (ADDRINT)&tc[tc_cursor];  // set an initial estimated addr in tc
+	instr_map[num_of_instr_map_entries].orig_targ_addr = orig_targ_addr; 
+	instr_map[num_of_instr_map_entries].hasNewTargAddr = false;
+	instr_map[num_of_instr_map_entries].new_targ_entry = -1;
+	instr_map[num_of_instr_map_entries].size = new_size;	
+	instr_map[num_of_instr_map_entries].category_enum = xed_decoded_inst_get_category(xedd);
+
+	num_of_instr_map_entries++;
+
+	// update expected size of tc:
+	tc_cursor += new_size;    	     
+
+	if (num_of_instr_map_entries >= max_ins_count) {
+		cerr << "out of memory for map_instr" << endl;
+		return -1;
+	}
+	
+
+	// debug print new encoded instr:
+	if (KnobVerbose) {
+		cerr << "    new instr:";
+		dump_instr_from_mem((ADDRINT *)instr_map[num_of_instr_map_entries-1].encoded_ins, instr_map[num_of_instr_map_entries-1].new_ins_addr);
+	}
+
+	return new_size;
+}
+
 
 
 /*************************************************/
@@ -769,19 +838,19 @@ int find_candidate_rtns_for_translation(IMG img)
 			// Open the RTN.
 			RTN_Open( rtn );              
 
-            for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
+			for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
 
-    			//debug print of orig instruction:
+    				//debug print of orig instruction:
 				if (KnobVerbose) {
- 					cerr << "old instr: ";
+					cerr << "old instr: ";
 					cerr << "0x" << hex << INS_Address(ins) << ": " << INS_Disassemble(ins) <<  endl;
 					//xed_print_hex_line(reinterpret_cast<UINT8*>(INS_Address (ins)), INS_Size(ins));				   			
 				}				
 
 				ADDRINT addr = INS_Address(ins);
                 			
-			    xed_decoded_inst_t xedd;
-			    xed_error_enum_t xed_code;							
+				xed_decoded_inst_t xedd;
+				xed_error_enum_t xed_code;							
 	            
 				xed_decoded_inst_zero_set_mode(&xedd,&dstate); 
 
@@ -1178,7 +1247,7 @@ VOID ImageLoad(IMG img, VOID *v)
 	// debug print of all images' instructions
 	//dump_all_image_instrs(img);
 
-    // Step 0: Check that the image is of the main executable file:
+	// Step 0: Check that the image is of the main executable file:
 	if (!IMG_IsMainExecutable(img))
 		return;
 
@@ -1221,12 +1290,12 @@ VOID ImageLoad(IMG img, VOID *v)
 
 	cout << "after write all new instructions to memory tc" << endl;
 
-   if (KnobDumpTranslatedCode) {
-	   cerr << "Translation Cache dump:" << endl;
-       dump_tc();  // dump the entire tc
+	if (KnobDumpTranslatedCode) {
+	cerr << "Translation Cache dump:" << endl;
+	dump_tc();  // dump the entire tc
 
-	   cerr << endl << "instructions map dump:" << endl;
-	   dump_entire_instr_map();     // dump all translated instructions in map_instr
+	cerr << endl << "instructions map dump:" << endl;
+	dump_entire_instr_map();     // dump all translated instructions in map_instr
    }
 
 	// Step 6: Enable the Commit-Uncommit thread to start 
@@ -1245,6 +1314,18 @@ INT32 Usage()
     cerr << KNOB_BASE::StringKnobSummary();
     cerr << endl;
     return -1;
+}
+
+
+/* ===================================================================== */
+/* My instrumentation func                                               */
+/* ===================================================================== */
+VOID my_inst()
+{
+    cerr << "This tool translated routines of an Intel(R) 64 binary"
+         << endl;
+    cerr << endl;
+    return;
 }
 
 
