@@ -11,9 +11,9 @@ lea    -128(%rsp), %rsp
 #push   %r10
 #push   %r11
 #push   %rax
-#
-##lbl: call lbl
-#
+
+lbl: call lbl
+
 #pop    %rax
 #pop    %r11
 #pop    %r10

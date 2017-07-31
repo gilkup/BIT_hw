@@ -1,0 +1,2 @@
+changed mmap to be closer
+don't inline the register push

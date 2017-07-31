@@ -293,9 +293,19 @@ void dump_tc()
  
 		xed_format_context(XED_SYNTAX_INTEL, &new_xedd, disasm_buf, 2048, static_cast<UINT64>(address), 0, 0);
 
-		cerr << "0x" << hex << address << ": " << disasm_buf <<  endl;
-
+		cerr << "0x" << hex << address << ": "; 
 		size = xed_decoded_inst_get_length (&new_xedd);	
+		
+		unsigned int i;
+		for(i = 0 ; i < size ; i++) {
+			fprintf(stderr, "%2x ", (*(char*)(address + i)) & 0xff);
+		}
+		for( ; i < 10 ; i++) {
+			fprintf(stderr, "   ");
+		}
+
+		cerr << disasm_buf <<  endl;
+
 	}
 }
 
@@ -618,9 +628,9 @@ int fix_direct_br_call_to_orig_addr(int instr_map_entry)
 	xed_error_enum_t xed_error = xed_encode(&enc_req, reinterpret_cast<UINT8*>(instr_map[instr_map_entry].encoded_ins), ilen, &olen);
 	if (xed_error != XED_ERROR_NONE) {
 		cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
-	    dump_instr_map_entry(instr_map_entry); 
-        return -1;
-    }
+		dump_instr_map_entry(instr_map_entry); 
+		return -1;
+	}
 
 	// handle the case where the original instr size is different from new encoded instr:
 	if (olen != xed_decoded_inst_get_length (&xedd)) {
@@ -808,8 +818,8 @@ int fix_instructions_displacements()
 				return -1;
 
 			if (instr_map[i].size != (unsigned int)rc) {
-			   size_diff += (rc - instr_map[i].size);
-			   instr_map[i].size = (unsigned int)rc;
+				size_diff += (rc - instr_map[i].size);
+				instr_map[i].size = (unsigned int)rc;
 			}
 
 		}  // end int i=0; i ..
@@ -1235,23 +1245,25 @@ int allocate_and_init_memory(IMG img)
 
 	// get a page size in the system:
 	pagesize = sysconf(_SC_PAGE_SIZE);
-    if (pagesize == -1) {
-      perror("sysconf");
-	  return -1;
+	if (pagesize == -1) {
+		perror("sysconf");
+		return -1;
 	}
 
 	ADDRINT text_size = (highest_sec_addr - lowest_sec_addr) * 2 + pagesize * 4;
 
-    tclen = 2 * text_size + pagesize * 4;   // TODO: need a better size estimate
+	tclen = 2 * text_size + pagesize * 4;   // TODO: need a better size estimate
 
 	// Allocate the needed tc with RW+EXEC permissions and is not located in an address that is more than 32bits afar:		
-	char * tc_addr = (char *) mmap(NULL, tclen, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+	//char * tc_addr = (char *) mmap(NULL, tclen, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+	char * tc_addr = (char *) mmap((void*)__FUNCTION__, tclen, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 	if ((ADDRINT) tc_addr == 0xffffffffffffffff) {
-	   cerr << "failed to allocate a translation cache" << endl;
+		cerr << "failed to allocate a translation cache" << endl;
        return -1;
 	}
 
 	cerr << "tc addr: " << hex << (ADDRINT)tc_addr << endl; 
+	cerr << "my_inst addr: " << hex << (void*)my_inst << endl; 
 
 	tc = (char *)tc_addr;
 
