@@ -146,7 +146,7 @@ int translated_rtn_num = 0;
 // commit/uncommit thread-related variables:
 volatile bool enable_commit_uncommit_flag = false;
 
-const char ins_call_prologure[] = {
+unsigned char ins_call_prologure[] = {
 #include "ins_call.bin.parsed"
 };
 
@@ -373,63 +373,70 @@ int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, unsigned int size)
 /*************************/
 int add_ins_call_prologue()
 {
+	unsigned int ins_call_prologure_idx = 0;
+	while(ins_call_prologure_idx < sizeof(ins_call_prologure)) {
+		xed_decoded_inst_t xedd;
+		xed_error_enum_t xed_code;							
+          
+		xed_decoded_inst_zero_set_mode(&xedd,&dstate); 
 
-	// copy orig instr to instr map:
-	ADDRINT orig_targ_addr = 0;
+		xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(ins_call_prologure + ins_call_prologure_idx), max_inst_len);
+		if (xed_code != XED_ERROR_NONE) {
+			cerr << "ERROR: xed decode failed for instr at: " << "ins_call_prologure" << endl;
+		}
 
-	if (xed_decoded_inst_get_length (xedd) != size) {
-		cerr << "Invalid instruction decoding" << endl;
-		return -1;
+		unsigned int orig_size = xed_decoded_inst_get_length (&xedd);
+
+		//xed_uint_t disp_byts = xed_decoded_inst_get_branch_displacement_width(xedd);
+		
+		//xed_int32_t disp;
+	
+		//if (disp_byts > 0) { // there is a branch offset.
+		//	disp = xed_decoded_inst_get_branch_displacement(xedd);
+		//	orig_targ_addr = pc + xed_decoded_inst_get_length (xedd) + disp;	
+		//}
+	
+		// Converts the decoder request to a valid encoder request:
+		xed_encoder_request_init_from_decode (&xedd);
+	
+		unsigned int new_size = 0;
+		
+		xed_error_enum_t xed_error = xed_encode (&xedd, reinterpret_cast<UINT8*>(instr_map[num_of_instr_map_entries].encoded_ins), max_inst_len , &new_size);
+		if (xed_error != XED_ERROR_NONE) {
+			cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;		
+			return -1;
+		}	
+		
+		// add a new entry in the instr_map:
+		
+		instr_map[num_of_instr_map_entries].orig_ins_addr = 0;
+		instr_map[num_of_instr_map_entries].new_ins_addr = (ADDRINT)&tc[tc_cursor];  // set an initial estimated addr in tc
+		instr_map[num_of_instr_map_entries].orig_targ_addr = 0; 
+		instr_map[num_of_instr_map_entries].hasNewTargAddr = false;
+		instr_map[num_of_instr_map_entries].new_targ_entry = -1;
+		instr_map[num_of_instr_map_entries].size = new_size;	
+		instr_map[num_of_instr_map_entries].category_enum = xed_decoded_inst_get_category(&xedd);
+	
+		num_of_instr_map_entries++;
+	
+		// update expected size of tc:
+		tc_cursor += new_size;    	     
+	
+		if (num_of_instr_map_entries >= max_ins_count) {
+			cerr << "out of memory for map_instr" << endl;
+			return -1;
+		}
+		
+	
+		// debug print new encoded instr:
+		if (KnobVerbose) {
+			cerr << "    new instr:";
+			dump_instr_from_mem((ADDRINT *)instr_map[num_of_instr_map_entries-1].encoded_ins, instr_map[num_of_instr_map_entries-1].new_ins_addr);
+		}
+		ins_call_prologure_idx += orig_size;
 	}
-
-	xed_uint_t disp_byts = xed_decoded_inst_get_branch_displacement_width(xedd);
-	
-	xed_int32_t disp;
-
-	if (disp_byts > 0) { // there is a branch offset.
-	disp = xed_decoded_inst_get_branch_displacement(xedd);
-		orig_targ_addr = pc + xed_decoded_inst_get_length (xedd) + disp;	
-	}
-
-	// Converts the decoder request to a valid encoder request:
-	xed_encoder_request_init_from_decode (xedd);
-
-	unsigned int new_size = 0;
-	
-	xed_error_enum_t xed_error = xed_encode (xedd, reinterpret_cast<UINT8*>(instr_map[num_of_instr_map_entries].encoded_ins), max_inst_len , &new_size);
-	if (xed_error != XED_ERROR_NONE) {
-		cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;		
-		return -1;
-	}	
-	
-	// add a new entry in the instr_map:
-	
-	instr_map[num_of_instr_map_entries].orig_ins_addr = pc;
-	instr_map[num_of_instr_map_entries].new_ins_addr = (ADDRINT)&tc[tc_cursor];  // set an initial estimated addr in tc
-	instr_map[num_of_instr_map_entries].orig_targ_addr = orig_targ_addr; 
-	instr_map[num_of_instr_map_entries].hasNewTargAddr = false;
-	instr_map[num_of_instr_map_entries].new_targ_entry = -1;
-	instr_map[num_of_instr_map_entries].size = new_size;	
-	instr_map[num_of_instr_map_entries].category_enum = xed_decoded_inst_get_category(xedd);
-
-	num_of_instr_map_entries++;
-
-	// update expected size of tc:
-	tc_cursor += new_size;    	     
-
-	if (num_of_instr_map_entries >= max_ins_count) {
-		cerr << "out of memory for map_instr" << endl;
-		return -1;
-	}
-	
-
-	// debug print new encoded instr:
-	if (KnobVerbose) {
-		cerr << "    new instr:";
-		dump_instr_from_mem((ADDRINT *)instr_map[num_of_instr_map_entries-1].encoded_ins, instr_map[num_of_instr_map_entries-1].new_ins_addr);
-	}
-
-	return new_size;
+	//return new_size;
+	return 0;
 }
 
 
@@ -812,7 +819,7 @@ int fix_instructions_displacements()
 /*****************************************/
 int find_candidate_rtns_for_translation(IMG img)
 {
-    int rc;
+	int rc;
 
 	// go over routines and check if they are candidates for translation and mark them for translation:
 
@@ -861,6 +868,13 @@ int find_candidate_rtns_for_translation(IMG img)
 					break;
 				}
 
+				// JIT in probe...
+				char disasm_buf[2048];
+		                xed_format_context(XED_SYNTAX_INTEL, &xedd, disasm_buf, 2048, 0, 0, 0);
+				if(strncmp(disasm_buf, "add ", 4) == 0) {
+					add_ins_call_prologue();
+				}
+
 				// Add instr into instr map:
 				rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins));
 				if (rc < 0) {
@@ -899,13 +913,13 @@ int copy_instrs_to_tc()
 
 	for (int i=0; i < num_of_instr_map_entries; i++) {
 
-	  if ((ADDRINT)&tc[cursor] != instr_map[i].new_ins_addr) {
-		  cerr << "ERROR: Non-matching instruction addresses: " << hex << (ADDRINT)&tc[cursor] << " vs. " << instr_map[i].new_ins_addr << endl;
-	      return -1;
-	  }	  
+		if ((ADDRINT)&tc[cursor] != instr_map[i].new_ins_addr) {
+			cerr << "ERROR: Non-matching instruction addresses: " << hex << (ADDRINT)&tc[cursor] << " vs. " << instr_map[i].new_ins_addr << endl;
+			return -1;
+		}	  
 
-	  memcpy(&tc[cursor], &instr_map[i].encoded_ins, instr_map[i].size);
-	  cursor += instr_map[i].size;
+		memcpy(&tc[cursor], &instr_map[i].encoded_ins, instr_map[i].size);
+		cursor += instr_map[i].size;
 	}
 
 	return 0;
@@ -1291,16 +1305,16 @@ VOID ImageLoad(IMG img, VOID *v)
 	cout << "after write all new instructions to memory tc" << endl;
 
 	if (KnobDumpTranslatedCode) {
-	cerr << "Translation Cache dump:" << endl;
-	dump_tc();  // dump the entire tc
+		cerr << "Translation Cache dump:" << endl;
+		dump_tc();  // dump the entire tc
 
-	cerr << endl << "instructions map dump:" << endl;
-	dump_entire_instr_map();     // dump all translated instructions in map_instr
-   }
+		cerr << endl << "instructions map dump:" << endl;
+		dump_entire_instr_map();     // dump all translated instructions in map_instr
+	}
 
 	// Step 6: Enable the Commit-Uncommit thread to start 
-    //         applyng the commit-uncommit routines alternatingly:
-    enable_commit_uncommit_flag = true;    
+	//         applyng the commit-uncommit routines alternatingly:
+	enable_commit_uncommit_flag = true;    
 }
 
 
