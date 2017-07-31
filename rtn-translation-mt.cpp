@@ -150,6 +150,8 @@ unsigned char ins_call_prologure[] = {
 #include "ins_call.bin.parsed"
 };
 
+VOID my_inst();
+
 /* ============================================================= */
 /* Service dump routines                                         */
 /* ============================================================= */
@@ -416,6 +418,10 @@ int add_ins_call_prologue()
 		instr_map[num_of_instr_map_entries].new_targ_entry = -1;
 		instr_map[num_of_instr_map_entries].size = new_size;	
 		instr_map[num_of_instr_map_entries].category_enum = xed_decoded_inst_get_category(&xedd);
+
+		if(instr_map[num_of_instr_map_entries].category_enum == XED_CATEGORY_CALL) {
+			instr_map[num_of_instr_map_entries].orig_targ_addr = (ADDRINT)my_inst;
+		}
 	
 		num_of_instr_map_entries++;
 	
@@ -702,13 +708,13 @@ int fix_direct_br_call_displacement(int instr_map_entry)
 	// the max displacement size of loop instructions is 1 byte:
 	xed_iclass_enum_t iclass_enum = xed_decoded_inst_get_iclass(&xedd);
 	if (iclass_enum == XED_ICLASS_LOOP ||  iclass_enum == XED_ICLASS_LOOPE || iclass_enum == XED_ICLASS_LOOPNE) {
-	  new_disp_byts = 1;
+		new_disp_byts = 1;
 	}
 
 	// the max displacement size of jecxz instructions is ???:
 	xed_iform_enum_t iform_enum = xed_decoded_inst_get_iform_enum (&xedd);
 	if (iform_enum == XED_IFORM_JRCXZ_RELBRb){
-	  new_disp_byts = 1;
+		new_disp_byts = 1;
 	}
 
 	// Converts the decoder request to a valid encoder request:
@@ -725,8 +731,8 @@ int fix_direct_br_call_displacement(int instr_map_entry)
 		cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) <<  endl;
 		char buf[2048];		
 		xed_format_context(XED_SYNTAX_INTEL, &xedd, buf, 2048, static_cast<UINT64>(instr_map[instr_map_entry].orig_ins_addr), 0, 0);
-	    cerr << " instr: " << "0x" << hex << instr_map[instr_map_entry].orig_ins_addr << " : " << buf <<  endl;
-  		return -1;
+		cerr << " instr: " << "0x" << hex << instr_map[instr_map_entry].orig_ins_addr << " : " << buf <<  endl;
+		return -1;
 	}		
 
 	new_targ_addr = instr_map[instr_map[instr_map_entry].new_targ_entry].new_ins_addr;
@@ -759,7 +765,7 @@ int fix_instructions_displacements()
 {
    // fix displacemnets of direct branch or call instructions:
 
-    int size_diff = 0;	
+	int size_diff = 0;	
 
 	do {
 		
@@ -810,8 +816,8 @@ int fix_instructions_displacements()
 
 	} while (size_diff != 0);
 
-   return 0;
- }
+	return 0;
+}
 
 
 /*****************************************/
@@ -1336,9 +1342,6 @@ INT32 Usage()
 /* ===================================================================== */
 VOID my_inst()
 {
-    cerr << "This tool translated routines of an Intel(R) 64 binary"
-         << endl;
-    cerr << endl;
     return;
 }
 
