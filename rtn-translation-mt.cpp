@@ -272,43 +272,43 @@ void dump_instr_map_entry(int instr_map_entry)
 /*************/
 void dump_tc()
 {
-	char disasm_buf[2048];
-	xed_decoded_inst_t new_xedd;
-	ADDRINT address = (ADDRINT)&tc[0];
-	unsigned int size = 0;
+        char disasm_buf[2048];
+        xed_decoded_inst_t new_xedd;
+        //ADDRINT address = (ADDRINT)&tc[0];
+        ADDRINT address = (ADDRINT)tc;
+        unsigned int size = 0;
 
-	while (address < (ADDRINT)&tc[tc_cursor]) {
+        while (address < (ADDRINT)&tc[tc_cursor]) {
 
-		address += size;
+                address += size;
 
-		xed_decoded_inst_zero_set_mode(&new_xedd,&dstate); 
-   
-		xed_error_enum_t xed_code = xed_decode(&new_xedd, reinterpret_cast<UINT8*>(address), max_inst_len);				   
+                xed_decoded_inst_zero_set_mode(&new_xedd,&dstate);
 
-		BOOL xed_ok = (xed_code == XED_ERROR_NONE);
-		if (!xed_ok){
-			cerr << "invalid opcode" << endl;
-			return;
-		}
- 
-		xed_format_context(XED_SYNTAX_INTEL, &new_xedd, disasm_buf, 2048, static_cast<UINT64>(address), 0, 0);
+                xed_error_enum_t xed_code = xed_decode(&new_xedd, reinterpret_cast<UINT8*>(address), max_inst_len);
 
-		cerr << "0x" << hex << address << ": "; 
-		size = xed_decoded_inst_get_length (&new_xedd);	
-		
-		unsigned int i;
-		for(i = 0 ; i < size ; i++) {
-			fprintf(stderr, "%2x ", (*(char*)(address + i)) & 0xff);
-		}
-		for( ; i < 10 ; i++) {
-			fprintf(stderr, "   ");
-		}
+                BOOL xed_ok = (xed_code == XED_ERROR_NONE);
+                if (!xed_ok){
+                        cerr << "invalid opcode" << endl;
+                        return;
+                }
 
-		cerr << disasm_buf <<  endl;
+                xed_format_context(XED_SYNTAX_INTEL, &new_xedd, disasm_buf, 2048, static_cast<UINT64>(address), 0, 0);
 
-	}
+                cerr << "0x" << hex << address << ": ";
+                size = xed_decoded_inst_get_length (&new_xedd);
+
+                unsigned int i;
+                for(i = 0 ; i < size ; i++) {
+                        fprintf(stderr, "%2x ", (*(char*)(address + i)) & 0xff);
+                }
+                for( ; i < 10 ; i++) {
+                        fprintf(stderr, "   ");
+                }
+
+                cerr << disasm_buf <<  endl;
+
+        }
 }
-
 
 /* ============================================================= */
 /* Translation routines                                         */
@@ -383,7 +383,7 @@ int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, unsigned int size)
 /*************************/
 /* add_ins_call_prologue() */
 /*************************/
-int add_ins_call_prologue()
+int add_ins_call_prologue(ADDRINT from)
 {
 	unsigned int ins_call_prologure_idx = 0;
 	while(ins_call_prologure_idx < sizeof(ins_call_prologure)) {
@@ -418,7 +418,6 @@ int add_ins_call_prologue()
 			cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;		
 			return -1;
 		}	
-		
 		// add a new entry in the instr_map:
 		
 		instr_map[num_of_instr_map_entries].orig_ins_addr = 0;
@@ -430,6 +429,7 @@ int add_ins_call_prologue()
 		instr_map[num_of_instr_map_entries].category_enum = xed_decoded_inst_get_category(&xedd);
 
 		if(instr_map[num_of_instr_map_entries].category_enum == XED_CATEGORY_CALL) {
+			instr_map[num_of_instr_map_entries].orig_ins_addr = from;
 			instr_map[num_of_instr_map_entries].orig_targ_addr = (ADDRINT)my_inst;
 		}
 	
@@ -625,12 +625,24 @@ int fix_direct_br_call_to_orig_addr(int instr_map_entry)
 	}
    
 
+//	if(instr_map[instr_map_entry].orig_targ_addr == (ADDRINT)my_inst) {
+//		cerr << "before .orig_targ_addr..encoded_ins[0]= " << hex << (int)instr_map[instr_map_entry].encoded_ins[0] << endl;
+//	}
+
 	xed_error_enum_t xed_error = xed_encode(&enc_req, reinterpret_cast<UINT8*>(instr_map[instr_map_entry].encoded_ins), ilen, &olen);
 	if (xed_error != XED_ERROR_NONE) {
 		cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
 		dump_instr_map_entry(instr_map_entry); 
 		return -1;
 	}
+
+//	if(instr_map[instr_map_entry].orig_targ_addr == (ADDRINT)my_inst) {
+//		cerr << "fsdfgdgadfgfsdgsdgdfsgsdf olen = " << olen << endl;
+//		olen = 5;
+//		cerr << "fsdfgdgadfgfsdgsdgdfsgsdf .orig_targ_addr= " << instr_map[instr_map_entry].orig_targ_addr << endl;
+//		cerr << "fsdfgdgadfgfsdgsdgdfsgsdf .orig_targ_addr..encoded_ins[0]= " << hex << (int)instr_map[instr_map_entry].encoded_ins[0] << endl;
+//		cerr << "fsdfgdgadfgfsdgsdgdfsgsdf .orig_targ_addr..encoded_ins[1]= " << hex << (int)instr_map[instr_map_entry].encoded_ins[1] << endl;
+//	}
 
 	// handle the case where the original instr size is different from new encoded instr:
 	if (olen != xed_decoded_inst_get_length (&xedd)) {
@@ -757,8 +769,7 @@ int fix_direct_br_call_displacement(int instr_map_entry)
 		cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
 		dump_instr_map_entry(instr_map_entry);
 		return -1;
-	}				
-
+	}
 	//debug print of new instruction in tc:
 	if (KnobVerbose) {
 		dump_instr_map_entry(instr_map_entry);
@@ -888,7 +899,7 @@ int find_candidate_rtns_for_translation(IMG img)
 				char disasm_buf[2048];
 		                xed_format_context(XED_SYNTAX_INTEL, &xedd, disasm_buf, 2048, 0, 0, 0);
 				if(strncmp(disasm_buf, "add ", 4) == 0) {
-					add_ins_call_prologue();
+					add_ins_call_prologue(addr);
 				}
 
 				// Add instr into instr map:
@@ -933,8 +944,16 @@ int copy_instrs_to_tc()
 			cerr << "ERROR: Non-matching instruction addresses: " << hex << (ADDRINT)&tc[cursor] << " vs. " << instr_map[i].new_ins_addr << endl;
 			return -1;
 		}	  
-
-		memcpy(&tc[cursor], &instr_map[i].encoded_ins, instr_map[i].size);
+		if(instr_map[i].orig_targ_addr == (ADDRINT(my_inst))) {
+			tc[cursor] = 0xe8;
+			tc[cursor + 1] = instr_map[i].encoded_ins[2] + 1;
+			tc[cursor + 2] = instr_map[i].encoded_ins[3];
+			tc[cursor + 3] = instr_map[i].encoded_ins[4];
+			tc[cursor + 4] = instr_map[i].encoded_ins[5];
+			tc[cursor + 5] = 0x90;
+		} else {
+			memcpy(&tc[cursor], &instr_map[i].encoded_ins, instr_map[i].size);
+		}
 		cursor += instr_map[i].size;
 	}
 
@@ -1354,7 +1373,8 @@ INT32 Usage()
 /* ===================================================================== */
 VOID my_inst()
 {
-    return;
+	for(;;);
+	return;
 }
 
 
