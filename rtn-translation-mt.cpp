@@ -150,7 +150,8 @@ unsigned char ins_call_prologure[] = {
 #include "ins_call.bin.parsed"
 };
 
-VOID my_inst();
+//void my_inst();
+char* my_inst;
 
 /* ============================================================= */
 /* Service dump routines                                         */
@@ -162,22 +163,22 @@ VOID my_inst();
 void dump_all_image_instrs(IMG img)
 {
 	for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec))
-    {   
-        for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn))
-        {		
-
+	{   
+	        for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn))
+	        {		
+	
 			// Open the RTN.
-            RTN_Open( rtn );
+			RTN_Open( rtn );
 
 			cerr << RTN_Name(rtn) << ":" << endl;
 
 			for( INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins) )
-            {				
-	              cerr << "0x" << hex << INS_Address(ins) << ": " << INS_Disassemble(ins) << endl;
+			{				
+				cerr << "0x" << hex << INS_Address(ins) << ": " << INS_Disassemble(ins) << endl;
 			}
 
 			// Close the RTN.
-            RTN_Close( rtn );
+			RTN_Close( rtn );
 		}
 	}
 }
@@ -191,11 +192,11 @@ void dump_instr_from_xedd (xed_decoded_inst_t* xedd, ADDRINT address)
 	// debug print decoded instr:
 	char disasm_buf[2048];
 
-    xed_uint64_t runtime_address = reinterpret_cast<xed_uint64_t>(address);  // set the runtime adddress for disassembly 	
+	xed_uint64_t runtime_address = reinterpret_cast<xed_uint64_t>(address);  // set the runtime adddress for disassembly 	
 
-    xed_format_context(XED_SYNTAX_INTEL, xedd, disasm_buf, sizeof(disasm_buf), static_cast<UINT64>(runtime_address), 0, 0);	
+	xed_format_context(XED_SYNTAX_INTEL, xedd, disasm_buf, sizeof(disasm_buf), static_cast<UINT64>(runtime_address), 0, 0);	
 
-    cerr << hex << address << ": " << disasm_buf <<  endl;
+	cerr << hex << address << ": " << disasm_buf <<  endl;
 }
 
 
@@ -204,21 +205,21 @@ void dump_instr_from_xedd (xed_decoded_inst_t* xedd, ADDRINT address)
 /************************/
 unsigned int dump_instr_from_mem (ADDRINT *address, ADDRINT new_addr)
 {
-  char disasm_buf[2048];
-  xed_decoded_inst_t new_xedd;
+	char disasm_buf[2048];
+	xed_decoded_inst_t new_xedd;
 
-  xed_decoded_inst_zero_set_mode(&new_xedd,&dstate);    
-  xed_error_enum_t xed_code = xed_decode(&new_xedd, reinterpret_cast<UINT8*>(address), max_inst_len);
-  BOOL xed_ok = (xed_code == XED_ERROR_NONE);
-  if (!xed_ok){
-	  cerr << "invalid opcode" << endl;
-	  return 0;
-  }
+	xed_decoded_inst_zero_set_mode(&new_xedd,&dstate);    
+	xed_error_enum_t xed_code = xed_decode(&new_xedd, reinterpret_cast<UINT8*>(address), max_inst_len);
+	BOOL xed_ok = (xed_code == XED_ERROR_NONE);
+	if (!xed_ok) {
+		cerr << "invalid opcode" << endl;
+		return 0;
+	}
  
-  xed_format_context(XED_SYNTAX_INTEL, &new_xedd, disasm_buf, 2048, static_cast<UINT64>(new_addr), 0, 0);
-  cerr << "0x" << hex << new_addr << ": " << disasm_buf <<  endl;   
+	xed_format_context(XED_SYNTAX_INTEL, &new_xedd, disasm_buf, 2048, static_cast<UINT64>(new_addr), 0, 0);
+	cerr << "0x" << hex << new_addr << ": " << disasm_buf <<  endl;   
 
-  return xed_decoded_inst_get_length (&new_xedd);
+	return xed_decoded_inst_get_length (&new_xedd);
 }
 
 
@@ -418,9 +419,10 @@ int add_ins_call_prologue(ADDRINT from)
 			cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;		
 			return -1;
 		}	
+		
 		// add a new entry in the instr_map:
 		
-		instr_map[num_of_instr_map_entries].orig_ins_addr = 0;
+		instr_map[num_of_instr_map_entries].orig_ins_addr = from;
 		instr_map[num_of_instr_map_entries].new_ins_addr = (ADDRINT)&tc[tc_cursor];  // set an initial estimated addr in tc
 		instr_map[num_of_instr_map_entries].orig_targ_addr = 0; 
 		instr_map[num_of_instr_map_entries].hasNewTargAddr = false;
@@ -951,6 +953,7 @@ int copy_instrs_to_tc()
 			tc[cursor + 3] = instr_map[i].encoded_ins[4];
 			tc[cursor + 4] = instr_map[i].encoded_ins[5];
 			tc[cursor + 5] = 0x90;
+			memcpy(&instr_map[i].encoded_ins, tc + cursor, instr_map[i].size);
 		} else {
 			memcpy(&tc[cursor], &instr_map[i].encoded_ins, instr_map[i].size);
 		}
@@ -1274,8 +1277,7 @@ int allocate_and_init_memory(IMG img)
 	tclen = 2 * text_size + pagesize * 4;   // TODO: need a better size estimate
 
 	// Allocate the needed tc with RW+EXEC permissions and is not located in an address that is more than 32bits afar:		
-	//char * tc_addr = (char *) mmap(NULL, tclen, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
-	char * tc_addr = (char *) mmap((void*)__FUNCTION__, tclen, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+	char * tc_addr = (char *) mmap(NULL, tclen, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 	if ((ADDRINT) tc_addr == 0xffffffffffffffff) {
 		cerr << "failed to allocate a translation cache" << endl;
        return -1;
@@ -1371,12 +1373,14 @@ INT32 Usage()
 /* ===================================================================== */
 /* My instrumentation func                                               */
 /* ===================================================================== */
-VOID my_inst()
+/*
+void my_inst()
 {
-	for(;;);
+//	for(;;);
+	asm volatile ("ret");
 	return;
 }
-
+*/
 
 /* ===================================================================== */
 /* Main                                                                  */
@@ -1406,6 +1410,9 @@ int main(int argc, char * argv[])
     }
 
     // Start the program, never returns
+
+	my_inst = (char *) mmap(NULL, 0x1000, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+	my_inst[0] = 0xc3;
     PIN_StartProgramProbed();
 
     return 0;
