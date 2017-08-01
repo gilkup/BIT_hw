@@ -150,8 +150,8 @@ unsigned char ins_call_prologure[] = {
 #include "ins_call.bin.parsed"
 };
 
-//void my_inst();
-char* my_inst;
+void my_inst();
+//char* my_inst;
 
 /* ============================================================= */
 /* Service dump routines                                         */
@@ -431,8 +431,13 @@ int add_ins_call_prologue(ADDRINT from)
 		instr_map[num_of_instr_map_entries].category_enum = xed_decoded_inst_get_category(&xedd);
 
 		if(instr_map[num_of_instr_map_entries].category_enum == XED_CATEGORY_CALL) {
-			instr_map[num_of_instr_map_entries].orig_ins_addr = from;
-			instr_map[num_of_instr_map_entries].orig_targ_addr = (ADDRINT)my_inst;
+			//ADDRINT my_offset = (ADDRINT)my_inst - (from + 5);
+			ADDRINT my_offset = 0xdeadbeef;
+			memcpy((void*)(instr_map[num_of_instr_map_entries].encoded_ins + 1), (void*)&my_offset, 4);
+//			instr_map[num_of_instr_map_entries].encoded_ins[2] = 0xaa;
+//			instr_map[num_of_instr_map_entries].encoded_ins[3] = 0xbb;
+//			instr_map[num_of_instr_map_entries].orig_ins_addr = from;
+			//instr_map[num_of_instr_map_entries].marina_orig_targ_addr = (ADDRINT)my_inst;
 		}
 	
 		num_of_instr_map_entries++;
@@ -472,15 +477,15 @@ int chain_all_direct_br_and_call_target_entries()
 		if (instr_map[i].hasNewTargAddr)
 			continue;
 
-        for (int j = 0; j < num_of_instr_map_entries; j++) {
+	        for (int j = 0; j < num_of_instr_map_entries; j++) {
 
-            if (j == i)
-			   continue;
+			if (j == i)
+				continue;
 	
-            if (instr_map[j].orig_ins_addr == instr_map[i].orig_targ_addr) {
-                instr_map[i].hasNewTargAddr = true; 
-	            instr_map[i].new_targ_entry = j;
-                break;
+			if (instr_map[j].orig_ins_addr == instr_map[i].orig_targ_addr) {
+				instr_map[i].hasNewTargAddr = true; 
+				instr_map[i].new_targ_entry = j;
+				break;
 			}
 		}
 	}
@@ -842,6 +847,29 @@ int fix_instructions_displacements()
 	return 0;
 }
 
+/************************************/
+/* fix_instructions_Marina() */
+/************************************/
+int fix_instructions_Marina()
+{
+	if (KnobVerbose) {
+		cerr << "starting a pass of fixing instructions Marina: " << endl;
+	}
+
+	for (int i=0; i < num_of_instr_map_entries; i++) {
+		ADDRINT orig_offset;
+		memcpy((void*)&orig_offset, (void*)(instr_map[i].encoded_ins + 1), 4);
+		
+		if(orig_offset == 0xdeadbeef) {
+			cerr << "sssssssssssssssssssssssssssssssssssss" <<endl;
+			ADDRINT my_offset = (ADDRINT)my_inst - (instr_map[i].new_ins_addr + 5);
+			memcpy((void*)(instr_map[i].encoded_ins + 1), (void*)&my_offset, 4);
+		}
+	}
+	return 0;
+}
+
+
 
 /*****************************************/
 /* find_candidate_rtns_for_translation() */
@@ -946,17 +974,17 @@ int copy_instrs_to_tc()
 			cerr << "ERROR: Non-matching instruction addresses: " << hex << (ADDRINT)&tc[cursor] << " vs. " << instr_map[i].new_ins_addr << endl;
 			return -1;
 		}	  
-		if(instr_map[i].orig_targ_addr == (ADDRINT(my_inst))) {
-			tc[cursor] = 0xe8;
-			tc[cursor + 1] = instr_map[i].encoded_ins[2] + 1;
-			tc[cursor + 2] = instr_map[i].encoded_ins[3];
-			tc[cursor + 3] = instr_map[i].encoded_ins[4];
-			tc[cursor + 4] = instr_map[i].encoded_ins[5];
-			tc[cursor + 5] = 0x90;
-			memcpy(&instr_map[i].encoded_ins, tc + cursor, instr_map[i].size);
-		} else {
+//		if(instr_map[i].orig_targ_addr == (ADDRINT(my_inst))) {
+//			tc[cursor] = 0xe8;
+//			tc[cursor + 1] = instr_map[i].encoded_ins[2] + 1;
+//			tc[cursor + 2] = instr_map[i].encoded_ins[3];
+//			tc[cursor + 3] = instr_map[i].encoded_ins[4];
+//			tc[cursor + 4] = instr_map[i].encoded_ins[5];
+//			tc[cursor + 5] = 0x90;
+//			memcpy(&instr_map[i].encoded_ins, tc + cursor, instr_map[i].size);
+//		} else {
 			memcpy(&tc[cursor], &instr_map[i].encoded_ins, instr_map[i].size);
-		}
+//		}
 		cursor += instr_map[i].size;
 	}
 
@@ -1335,6 +1363,15 @@ VOID ImageLoad(IMG img, VOID *v)
 	
 	cout << "after fix instructions displacements" << endl;
 
+	cout << "after Marina step" << endl;
+
+	// Step 4.1: fix rip-based, direct branch and direct call displacements:
+	rc = fix_instructions_Marina();
+	if (rc < 0 )
+		return;
+	
+	cout << "after Marina step" << endl;
+
 
 	// Step 5: write translated routines to new tc:
 	rc = copy_instrs_to_tc();
@@ -1373,14 +1410,15 @@ INT32 Usage()
 /* ===================================================================== */
 /* My instrumentation func                                               */
 /* ===================================================================== */
-/*
+
 void my_inst()
 {
 //	for(;;);
-	asm volatile ("ret");
+	printf("hi\n");
+//	asm volatile ("ret");
 	return;
 }
-*/
+
 
 /* ===================================================================== */
 /* Main                                                                  */
@@ -1389,33 +1427,33 @@ void my_inst()
 int main(int argc, char * argv[])
 {
 
-    // Initialize pin & symbol manager
-    //out = new std::ofstream("xed-print.out");
+	// Initialize pin & symbol manager
+	//out = new std::ofstream("xed-print.out");
 
-    if( PIN_Init(argc,argv) )
-        return Usage();
+	if( PIN_Init(argc,argv) )
+		return Usage();
 
-    PIN_InitSymbols();	
+	PIN_InitSymbols();	
 
 	// Register ImageLoad
 	IMG_AddInstrumentFunction(ImageLoad, 0);
 
-    /* It is safe to create internal threads in the tool's main procedure and spawn new
-     * internal threads from existing ones. All other places, like Pin callbacks and 
-     * analysis routines in application threads, are not safe for creating internal threads.
-    */
-    THREADID tid = PIN_SpawnInternalThread(commit_uncommit_translated_routines, NULL, 0, NULL);
-    if (tid == INVALID_THREADID) {
+	/* It is safe to create internal threads in the tool's main procedure and spawn new
+	 * internal threads from existing ones. All other places, like Pin callbacks and 
+	 * analysis routines in application threads, are not safe for creating internal threads.
+	 */
+	THREADID tid = PIN_SpawnInternalThread(commit_uncommit_translated_routines, NULL, 0, NULL);
+	if (tid == INVALID_THREADID) {
 		cerr << "failed to spawn a thread for commit" << endl;
-    }
+	}
 
-    // Start the program, never returns
+	// Start the program, never returns
 
-	my_inst = (char *) mmap(NULL, 0x1000, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
-	my_inst[0] = 0xc3;
-    PIN_StartProgramProbed();
+	//my_inst = (char *) mmap(NULL, 0x1000, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+	//my_inst[0] = 0xc3;
+	PIN_StartProgramProbed();
 
-    return 0;
+	return 0;
 }
 
 /* ===================================================================== */
