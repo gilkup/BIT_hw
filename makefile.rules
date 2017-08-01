@@ -95,7 +95,10 @@ $(OBJDIR)Tracer$(OBJ_SUFFIX): Tracer.cpp AllocData.cpp
 $(OBJDIR)AllocData$(OBJ_SUFFIX): AllocData.cpp
 	$(CXX) $(TOOL_CXXFLAGS) $(COMP_OBJ)$@ $<
 
+$(OBJDIR)handler_wrappers$(OBJ_SUFFIX): handler_wrappers.S
+	as handler_wrappers.S -o $(OBJDIR)handler_wrappers$(OBJ_SUFFIX)
+
 # Build the tool as a dll (shared object).
-$(OBJDIR)my_malloc_trace$(PINTOOL_SUFFIX): $(OBJDIR)my_malloc_trace$(OBJ_SUFFIX) $(OBJDIR)Tracer$(OBJ_SUFFIX) $(OBJDIR)AllocData$(OBJ_SUFFIX)
+#$(OBJDIR)$(TEST_TOOL_ROOTS)$(PINTOOL_SUFFIX): $(OBJDIR)$(TEST_TOOL_ROOTS)$(OBJ_SUFFIX) $(OBJDIR)handler_wrappers$(OBJ_SUFFIX)
 	$(LINKER) $(TOOL_LDFLAGS_NOOPT) $(LINK_EXE)$@ $(^:%.h=) $(TOOL_LPATHS) $(TOOL_LIBS)
 
