@@ -1017,14 +1017,17 @@ int safe_code_update(ADDRINT addr, char *bytes, unsigned int size, int is_code_w
 
 	//1st stage: insert jmp to itself.
 	*(ADDRINT *)addr = JMP_TO_ITSELF_OFFFSET_OPCODE;
+	asm volatile("mfence");
 
 	//2nd stage: restore the rest of the bytes after the 1st 8 bytes:
 	memcpy((char *)(addr + SIZE_OF_JMP_TO_ITSELF_OPCODE),   
 		(char *)(bytes + SIZE_OF_JMP_TO_ITSELF_OPCODE), 
 		size - SIZE_OF_JMP_TO_ITSELF_OPCODE);
+	asm volatile("mfence");
 
 	//3rd stage: restore the 1st 8 bytes from original code from the probing code:
 	memcpy((char *)addr, (char *)bytes, SIZE_OF_JMP_TO_ITSELF_OPCODE);
+	asm volatile("mfence");
 
 	return 0;
 }		
