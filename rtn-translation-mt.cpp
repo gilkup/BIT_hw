@@ -998,7 +998,7 @@ int copy_instrs_to_tc()
 /***************************/
 /* void safe_code_update() */
 /***************************/
-int safe_code_update(ADDRINT addr, char *bytes, unsigned int size, int is_code_write_protected)
+int safe_code_update(ADDRINT addr, volatile char *bytes, unsigned int size, int is_code_write_protected)
 {
 
 	if (is_code_write_protected) {
@@ -1012,6 +1012,7 @@ int safe_code_update(ADDRINT addr, char *bytes, unsigned int size, int is_code_w
 
 	if (size <= 8)  { // update can be done with a single atomic store instr:
 		memcpy((char *)addr, (char *)bytes, size);
+		asm volatile("mfence");
 		return 0;
 	}
 

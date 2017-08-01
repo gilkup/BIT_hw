@@ -13,9 +13,6 @@ push   %r11
 push   %rax
 push   %rax
 
-#mov    -0x85c(%rbp),%eax
-#and    $0x7fff,%eax
-#nop
 lbl: call lbl
 
 pop    %rax
