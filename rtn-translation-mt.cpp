@@ -857,13 +857,16 @@ int fix_instructions_Marina()
 	}
 
 	for (int i=0; i < num_of_instr_map_entries; i++) {
-		ADDRINT orig_offset;
+		volatile ADDRINT orig_offset;
 		memcpy((void*)&orig_offset, (void*)(instr_map[i].encoded_ins + 1), 4);
 		
 		if(orig_offset == 0xdeadbeef) {
-			cerr << "sssssssssssssssssssssssssssssssssssss" <<endl;
-			ADDRINT my_offset = (ADDRINT)my_inst - (instr_map[i].new_ins_addr + 5);
+			//cerr << "sssssssssssssssssssssssssssssssssssss" <<endl;
+			//cerr << flush;
+			//asm volatile("mfence");
+			volatile ADDRINT my_offset = (ADDRINT)my_inst - (instr_map[i].new_ins_addr + 5);
 			memcpy((void*)(instr_map[i].encoded_ins + 1), (void*)&my_offset, 4);
+			//asm volatile("mfence");
 		}
 	}
 	return 0;
@@ -1219,7 +1222,8 @@ void commit_translated_routines()
 /**********************************************/
 void commit_uncommit_translated_routines(void *v) 
 {
-    while (!enable_commit_uncommit_flag);
+	while (!enable_commit_uncommit_flag);
+	asm volatile("mfence");
 	
 	while (true) {
 		cerr << "before commit translated routines" << endl;
@@ -1390,6 +1394,7 @@ VOID ImageLoad(IMG img, VOID *v)
 
 	// Step 6: Enable the Commit-Uncommit thread to start 
 	//         applyng the commit-uncommit routines alternatingly:
+	asm volatile("mfence");
 	enable_commit_uncommit_flag = true;    
 }
 
@@ -1414,7 +1419,7 @@ INT32 Usage()
 void my_inst()
 {
 //	for(;;);
-	printf("hi\n");
+//	printf("hi\n");
 //	asm volatile ("ret");
 	return;
 }
