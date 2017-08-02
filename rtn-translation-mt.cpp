@@ -108,6 +108,8 @@ int tclen = 0;
 IMG img_tc;
 int pagesize;
 
+enum my_real_dst_t {NONE, MY_INST, MY_INST_AUX, MY_MALLOC}; 
+
 // instruction map with an entry for each new instruction:
 typedef struct { 
 	ADDRINT orig_ins_addr;
@@ -118,6 +120,7 @@ typedef struct {
 	xed_category_enum_t category_enum;
 	unsigned int size;
 	int new_targ_entry;
+	enum my_real_dst_t my_real_dst;
 } instr_map_t;
 
 
@@ -359,6 +362,7 @@ int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, unsigned int size)
 	instr_map[num_of_instr_map_entries].new_targ_entry = -1;
 	instr_map[num_of_instr_map_entries].size = new_size;	
 	instr_map[num_of_instr_map_entries].category_enum = xed_decoded_inst_get_category(xedd);
+	instr_map[num_of_instr_map_entries].my_real_dst = NONE;
 
 	num_of_instr_map_entries++;
 
@@ -400,15 +404,6 @@ int add_ins_call_prologue(ADDRINT from)
 
 		unsigned int orig_size = xed_decoded_inst_get_length (&xedd);
 
-		//xed_uint_t disp_byts = xed_decoded_inst_get_branch_displacement_width(xedd);
-		
-		//xed_int32_t disp;
-	
-		//if (disp_byts > 0) { // there is a branch offset.
-		//	disp = xed_decoded_inst_get_branch_displacement(xedd);
-		//	orig_targ_addr = pc + xed_decoded_inst_get_length (xedd) + disp;	
-		//}
-	
 		// Converts the decoder request to a valid encoder request:
 		xed_encoder_request_init_from_decode (&xedd);
 	
@@ -429,15 +424,12 @@ int add_ins_call_prologue(ADDRINT from)
 		instr_map[num_of_instr_map_entries].new_targ_entry = -1;
 		instr_map[num_of_instr_map_entries].size = new_size;	
 		instr_map[num_of_instr_map_entries].category_enum = xed_decoded_inst_get_category(&xedd);
+		instr_map[num_of_instr_map_entries].my_real_dst = NONE;
 
 		if(instr_map[num_of_instr_map_entries].category_enum == XED_CATEGORY_CALL) {
-			//ADDRINT my_offset = (ADDRINT)my_inst - (from + 5);
 			ADDRINT my_offset = 0xdeadbeef;
 			memcpy((void*)(instr_map[num_of_instr_map_entries].encoded_ins + 1), (void*)&my_offset, 4);
-//			instr_map[num_of_instr_map_entries].encoded_ins[2] = 0xaa;
-//			instr_map[num_of_instr_map_entries].encoded_ins[3] = 0xbb;
-//			instr_map[num_of_instr_map_entries].orig_ins_addr = from;
-			//instr_map[num_of_instr_map_entries].marina_orig_targ_addr = (ADDRINT)my_inst;
+			instr_map[num_of_instr_map_entries].my_real_dst = MY_INST_AUX;
 		}
 	
 		num_of_instr_map_entries++;
@@ -859,8 +851,10 @@ int fix_instructions_Marina()
 	for (int i=0; i < num_of_instr_map_entries; i++) {
 		volatile ADDRINT orig_offset;
 		memcpy((void*)&orig_offset, (void*)(instr_map[i].encoded_ins + 1), 4);
-		
 		if(orig_offset == 0xdeadbeef) {
+			//if(instr_map[i].my_real_dst != MY_INST_AUX)
+		//		cerr << "1111111111111111111111111111111" << endl;
+			//if(instr_map[i].my_real_dst == MY_INST_AUX) cerr << "2222222222222222222222222\n" << endl;
 			//cerr << "sssssssssssssssssssssssssssssssssssss" <<endl;
 			//cerr << flush;
 			//asm volatile("mfence");
@@ -1009,6 +1003,7 @@ int safe_code_update(ADDRINT addr, volatile char *bytes, unsigned int size, int 
 			return -1;
 		}
 	}
+	asm volatile("mfence");
 
 	if (size <= 8)  { // update can be done with a single atomic store instr:
 		memcpy((char *)addr, (char *)bytes, size);
@@ -1209,6 +1204,7 @@ void commit_translated_routines()
 
 		//save the original non-probed code before applying the probing jump:
 		memcpy((char *)translated_rtn[i].orig_probed_mem, (char *)translated_rtn[i].rtn_addr, MAX_PROBE_JUMP_INSTR_BYTES);
+		asm volatile("mfence");
 
 		// insert a probe jump from original rtn addr to translated rtn:
 		int rc = insert_probe_jump(translated_rtn[i].rtn_addr, translated_rtn_addr, 1);
@@ -1233,7 +1229,9 @@ void commit_uncommit_translated_routines(void *v)
 		cerr << "before commit translated routines" << endl;
 
 		PIN_LockClient();
+		asm volatile("mfence");
 		commit_translated_routines();
+		asm volatile("mfence");
 		PIN_UnlockClient();
 
 		cerr << "after commit translated routines" << endl;
@@ -1243,7 +1241,9 @@ void commit_uncommit_translated_routines(void *v)
 		cerr << "before uncommit translated routines" << endl;
 
 		PIN_LockClient();
+		asm volatile("mfence");
 		uncommit_translated_routines();
+		asm volatile("mfence");
 		PIN_UnlockClient();
 
 		cerr << "after uncommit translated routines" << endl;
@@ -1386,6 +1386,7 @@ VOID ImageLoad(IMG img, VOID *v)
 	if (rc < 0 )
 		return;
 
+	asm volatile("mfence");
 	cout << "after write all new instructions to memory tc" << endl;
 
 	if (KnobDumpTranslatedCode) {
@@ -1447,6 +1448,7 @@ int main(int argc, char * argv[])
 	// Register ImageLoad
 	IMG_AddInstrumentFunction(ImageLoad, 0);
 
+	asm volatile("mfence");
 	/* It is safe to create internal threads in the tool's main procedure and spawn new
 	 * internal threads from existing ones. All other places, like Pin callbacks and 
 	 * analysis routines in application threads, are not safe for creating internal threads.
