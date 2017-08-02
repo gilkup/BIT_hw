@@ -108,7 +108,7 @@ int tclen = 0;
 IMG img_tc;
 int pagesize;
 
-enum my_real_dst_t {NONE, MY_INST, MY_INST_AUX, MY_MALLOC}; 
+enum my_real_dst_t {NONE, MY_INST, MY_INST_AUX, MY_MALLOC, IN_MY_INST_AUX}; 
 
 // instruction map with an entry for each new instruction:
 typedef struct { 
@@ -151,6 +151,10 @@ volatile bool enable_commit_uncommit_flag = false;
 
 unsigned char ins_call_prologure[] = {
 #include "ins_call.bin.parsed"
+};
+
+unsigned char my_inst_aux[] = {
+#include "my_inst_aux.bin.parsed"
 };
 
 void my_inst();
@@ -385,19 +389,19 @@ int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, unsigned int size)
 }
 
 
-/*************************/
+/***************************/
 /* add_ins_call_prologue() */
-/*************************/
-int add_ins_call_prologue(ADDRINT from)
+/***************************/
+int add_ins_call_prologue(ADDRINT from, unsigned char* inst_buf_to_push, size_t inst_buf_size, enum my_real_dst_t call_target_type)
 {
 	unsigned int ins_call_prologure_idx = 0;
-	while(ins_call_prologure_idx < sizeof(ins_call_prologure)) {
+	while(ins_call_prologure_idx < inst_buf_size) {
 		xed_decoded_inst_t xedd;
 		xed_error_enum_t xed_code;							
           
 		xed_decoded_inst_zero_set_mode(&xedd,&dstate); 
 
-		xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(ins_call_prologure + ins_call_prologure_idx), max_inst_len);
+		xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(inst_buf_to_push + ins_call_prologure_idx), max_inst_len);
 		if (xed_code != XED_ERROR_NONE) {
 			cerr << "ERROR: xed decode failed for instr at: " << "ins_call_prologure" << endl;
 		}
@@ -426,10 +430,15 @@ int add_ins_call_prologue(ADDRINT from)
 		instr_map[num_of_instr_map_entries].category_enum = xed_decoded_inst_get_category(&xedd);
 		instr_map[num_of_instr_map_entries].my_real_dst = NONE;
 
+		if(call_target_type == MY_INST)
+			instr_map[num_of_instr_map_entries].my_real_dst = IN_MY_INST_AUX;
+
 		if(instr_map[num_of_instr_map_entries].category_enum == XED_CATEGORY_CALL) {
+		//	if(call_target_type == MY_INST)
+		//		cerr << "11111111111111111111222222222222222: "<< ins_call_prologure_idx << endl;
 			ADDRINT my_offset = 0xdeadbeef;
 			memcpy((void*)(instr_map[num_of_instr_map_entries].encoded_ins + 1), (void*)&my_offset, 4);
-			instr_map[num_of_instr_map_entries].my_real_dst = MY_INST_AUX;
+			instr_map[num_of_instr_map_entries].my_real_dst = call_target_type;
 		}
 	
 		num_of_instr_map_entries++;
@@ -623,25 +632,12 @@ int fix_direct_br_call_to_orig_addr(int instr_map_entry)
 		return -1;
 	}
    
-
-//	if(instr_map[instr_map_entry].orig_targ_addr == (ADDRINT)my_inst) {
-//		cerr << "before .orig_targ_addr..encoded_ins[0]= " << hex << (int)instr_map[instr_map_entry].encoded_ins[0] << endl;
-//	}
-
 	xed_error_enum_t xed_error = xed_encode(&enc_req, reinterpret_cast<UINT8*>(instr_map[instr_map_entry].encoded_ins), ilen, &olen);
 	if (xed_error != XED_ERROR_NONE) {
 		cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) << endl;
 		dump_instr_map_entry(instr_map_entry); 
 		return -1;
 	}
-
-//	if(instr_map[instr_map_entry].orig_targ_addr == (ADDRINT)my_inst) {
-//		cerr << "fsdfgdgadfgfsdgsdgdfsgsdf olen = " << olen << endl;
-//		olen = 5;
-//		cerr << "fsdfgdgadfgfsdgsdgdfsgsdf .orig_targ_addr= " << instr_map[instr_map_entry].orig_targ_addr << endl;
-//		cerr << "fsdfgdgadfgfsdgsdgdfsgsdf .orig_targ_addr..encoded_ins[0]= " << hex << (int)instr_map[instr_map_entry].encoded_ins[0] << endl;
-//		cerr << "fsdfgdgadfgfsdgsdgdfsgsdf .orig_targ_addr..encoded_ins[1]= " << hex << (int)instr_map[instr_map_entry].encoded_ins[1] << endl;
-//	}
 
 	// handle the case where the original instr size is different from new encoded instr:
 	if (olen != xed_decoded_inst_get_length (&xedd)) {
@@ -848,22 +844,30 @@ int fix_instructions_Marina()
 		cerr << "starting a pass of fixing instructions Marina: " << endl;
 	}
 
+	ADDRINT my_inst_aux_addr = 0;	// I assume this wrapper comes before all other code
+
 	for (int i=0; i < num_of_instr_map_entries; i++) {
-		volatile ADDRINT orig_offset;
-		memcpy((void*)&orig_offset, (void*)(instr_map[i].encoded_ins + 1), 4);
-		//if(orig_offset == 0xdeadbeef && instr_map[i].my_real_dst == MY_INST_AUX) {
-		if((unsigned int)orig_offset == 0xdeadbeef) {
-			//if(instr_map[i].my_real_dst != MY_INST_AUX)
-	//			cerr << "1111111111111111111111111111111" << endl;
-			//if(instr_map[i].my_real_dst == MY_INST_AUX) cerr << "2222222222222222222222222\n" << endl;
-			//cerr << "sssssssssssssssssssssssssssssssssssss" <<endl;
-			//cerr << flush;
-			//asm volatile("mfence");
-			volatile ADDRINT my_offset = (ADDRINT)my_inst - (instr_map[i].new_ins_addr + 5);
-			memcpy((void*)(instr_map[i].encoded_ins + 1), (void*)&my_offset, 4);
-			//asm volatile("mfence");
+//		volatile ADDRINT orig_offset;
+//		memcpy((void*)&orig_offset, (void*)(instr_map[i].encoded_ins + 1), 4);
+
+		if(instr_map[i].my_real_dst == IN_MY_INST_AUX) {
+			if(!my_inst_aux_addr)
+				my_inst_aux_addr = instr_map[i].new_ins_addr;
 		}
-	}//cerr << "end" << endl;
+
+
+		if(instr_map[i].my_real_dst == MY_INST) {
+			volatile ADDRINT my_offset = (ADDRINT)my_inst - (instr_map[i].new_ins_addr + 5);
+			cerr << "my_inst_aux_addr: " << my_inst_aux_addr << endl;
+			memcpy((void*)(instr_map[i].encoded_ins + 1), (void*)&my_offset, 4);
+		}
+
+		if(instr_map[i].my_real_dst == MY_INST_AUX) {
+			//volatile ADDRINT my_offset = (ADDRINT)my_inst - (instr_map[i].new_ins_addr + 5);
+			volatile ADDRINT my_offset = my_inst_aux_addr - (instr_map[i].new_ins_addr + 5);
+			memcpy((void*)(instr_map[i].encoded_ins + 1), (void*)&my_offset, 4);
+		}
+	}
 	return 0;
 }
 
@@ -877,6 +881,8 @@ int find_candidate_rtns_for_translation(IMG img)
 	int rc;
 
 	// go over routines and check if they are candidates for translation and mark them for translation:
+
+	add_ins_call_prologue(0, my_inst_aux, sizeof(my_inst_aux), MY_INST);
 
 	for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec))
 	{   
@@ -927,7 +933,7 @@ int find_candidate_rtns_for_translation(IMG img)
 				char disasm_buf[2048];
 		                xed_format_context(XED_SYNTAX_INTEL, &xedd, disasm_buf, 2048, 0, 0, 0);
 				if(strncmp(disasm_buf, "add ", 4) == 0) {
-					add_ins_call_prologue(addr);
+					add_ins_call_prologue(addr, ins_call_prologure, sizeof(ins_call_prologure), MY_INST_AUX);
 				}
 
 				// Add instr into instr map:
@@ -1372,7 +1378,7 @@ VOID ImageLoad(IMG img, VOID *v)
 	
 	cout << "after fix instructions displacements" << endl;
 
-	cout << "after Marina step" << endl;
+	cout << "Before Marina step" << endl;
 
 	// Step 4.1: fix rip-based, direct branch and direct call displacements:
 	rc = fix_instructions_Marina();

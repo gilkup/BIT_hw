@@ -26,3 +26,10 @@ pop    %rsi
 pop    %rdi
 popf
 leave
+
+ret
+
+nop
+nop
+nop
+
