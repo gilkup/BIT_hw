@@ -108,7 +108,11 @@ int tclen = 0;
 IMG img_tc;
 int pagesize;
 
-enum my_real_dst_t {NONE, MY_INST, MY_INST_AUX, MY_MALLOC, IN_MY_INST_AUX}; 
+enum my_real_dst_t {NONE, // for instruction I don't touch
+			MY_INST_READ,	// target of the actual function
+			MY_INST_READ_AUX,	// target of the aux function that saves registers
+			IN_MY_INST_READ_AUX,	// members of the aux function, to be able to find the func
+			MY_MALLOC}; 
 
 // instruction map with an entry for each new instruction:
 typedef struct { 
@@ -153,12 +157,11 @@ unsigned char ins_call_prologure[] = {
 #include "ins_call.bin.parsed"
 };
 
-unsigned char my_inst_aux[] = {
-#include "my_inst_aux.bin.parsed"
+unsigned char my_inst_read_aux[] = {
+#include "my_inst_read_aux.bin.parsed"
 };
 
-void my_inst();
-//char* my_inst;
+void my_inst_read();
 
 /* ============================================================= */
 /* Service dump routines                                         */
@@ -430,11 +433,11 @@ int add_ins_call_prologue(ADDRINT from, unsigned char* inst_buf_to_push, size_t 
 		instr_map[num_of_instr_map_entries].category_enum = xed_decoded_inst_get_category(&xedd);
 		instr_map[num_of_instr_map_entries].my_real_dst = NONE;
 
-		if(call_target_type == MY_INST)
-			instr_map[num_of_instr_map_entries].my_real_dst = IN_MY_INST_AUX;
+		if(call_target_type == MY_INST_READ)
+			instr_map[num_of_instr_map_entries].my_real_dst = IN_MY_INST_READ_AUX;
 
 		if(instr_map[num_of_instr_map_entries].category_enum == XED_CATEGORY_CALL) {
-		//	if(call_target_type == MY_INST)
+		//	if(call_target_type == MY_INST_READ)
 		//		cerr << "11111111111111111111222222222222222: "<< ins_call_prologure_idx << endl;
 			ADDRINT my_offset = 0xdeadbeef;
 			memcpy((void*)(instr_map[num_of_instr_map_entries].encoded_ins + 1), (void*)&my_offset, 4);
@@ -844,27 +847,22 @@ int fix_instructions_Marina()
 		cerr << "starting a pass of fixing instructions Marina: " << endl;
 	}
 
-	ADDRINT my_inst_aux_addr = 0;	// I assume this wrapper comes before all other code
+	ADDRINT my_inst_read_aux_addr = 0;	// I assume this wrapper comes before all other code
 
 	for (int i=0; i < num_of_instr_map_entries; i++) {
-//		volatile ADDRINT orig_offset;
-//		memcpy((void*)&orig_offset, (void*)(instr_map[i].encoded_ins + 1), 4);
-
-		if(instr_map[i].my_real_dst == IN_MY_INST_AUX) {
-			if(!my_inst_aux_addr)
-				my_inst_aux_addr = instr_map[i].new_ins_addr;
+		if(instr_map[i].my_real_dst == IN_MY_INST_READ_AUX) {
+			if(!my_inst_read_aux_addr)
+				my_inst_read_aux_addr = instr_map[i].new_ins_addr;
 		}
 
 
-		if(instr_map[i].my_real_dst == MY_INST) {
-			volatile ADDRINT my_offset = (ADDRINT)my_inst - (instr_map[i].new_ins_addr + 5);
-			cerr << "my_inst_aux_addr: " << my_inst_aux_addr << endl;
+		if(instr_map[i].my_real_dst == MY_INST_READ) {
+			volatile ADDRINT my_offset = (ADDRINT)my_inst_read - (instr_map[i].new_ins_addr + 5);
 			memcpy((void*)(instr_map[i].encoded_ins + 1), (void*)&my_offset, 4);
 		}
 
-		if(instr_map[i].my_real_dst == MY_INST_AUX) {
-			//volatile ADDRINT my_offset = (ADDRINT)my_inst - (instr_map[i].new_ins_addr + 5);
-			volatile ADDRINT my_offset = my_inst_aux_addr - (instr_map[i].new_ins_addr + 5);
+		if(instr_map[i].my_real_dst == MY_INST_READ_AUX) {
+			volatile ADDRINT my_offset = my_inst_read_aux_addr - (instr_map[i].new_ins_addr + 5);
 			memcpy((void*)(instr_map[i].encoded_ins + 1), (void*)&my_offset, 4);
 		}
 	}
@@ -882,7 +880,7 @@ int find_candidate_rtns_for_translation(IMG img)
 
 	// go over routines and check if they are candidates for translation and mark them for translation:
 
-	add_ins_call_prologue(0, my_inst_aux, sizeof(my_inst_aux), MY_INST);
+	add_ins_call_prologue(0, my_inst_read_aux, sizeof(my_inst_read_aux), MY_INST_READ);
 
 	for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec))
 	{   
@@ -934,7 +932,7 @@ int find_candidate_rtns_for_translation(IMG img)
 		                xed_format_context(XED_SYNTAX_INTEL, &xedd, disasm_buf, 2048, 0, 0, 0);
 				//if(strncmp(disasm_buf, "add ", 4) == 0) {
 				if(strncmp(disasm_buf, "mov dword ptr [rax], ", strlen("mov dword ptr [rax], ")) == 0) {
-					add_ins_call_prologue(addr, ins_call_prologure, sizeof(ins_call_prologure), MY_INST_AUX);
+					add_ins_call_prologue(addr, ins_call_prologure, sizeof(ins_call_prologure), MY_INST_READ_AUX);
 				}
 
 				// Add instr into instr map:
@@ -979,17 +977,7 @@ int copy_instrs_to_tc()
 			cerr << "ERROR: Non-matching instruction addresses: " << hex << (ADDRINT)&tc[cursor] << " vs. " << instr_map[i].new_ins_addr << endl;
 			return -1;
 		}	  
-//		if(instr_map[i].orig_targ_addr == (ADDRINT(my_inst))) {
-//			tc[cursor] = 0xe8;
-//			tc[cursor + 1] = instr_map[i].encoded_ins[2] + 1;
-//			tc[cursor + 2] = instr_map[i].encoded_ins[3];
-//			tc[cursor + 3] = instr_map[i].encoded_ins[4];
-//			tc[cursor + 4] = instr_map[i].encoded_ins[5];
-//			tc[cursor + 5] = 0x90;
-//			memcpy(&instr_map[i].encoded_ins, tc + cursor, instr_map[i].size);
-//		} else {
-			memcpy(&tc[cursor], &instr_map[i].encoded_ins, instr_map[i].size);
-//		}
+		memcpy(&tc[cursor], &instr_map[i].encoded_ins, instr_map[i].size);
 		cursor += instr_map[i].size;
 	}
 
@@ -1328,7 +1316,7 @@ int allocate_and_init_memory(IMG img)
 	}
 
 	cerr << "tc addr: " << hex << (ADDRINT)tc_addr << endl; 
-	cerr << "my_inst addr: " << hex << (void*)my_inst << endl; 
+	cerr << "my_inst addr: " << hex << (void*)my_inst_read << endl; 
 
 	tc = (char *)tc_addr;
 
@@ -1429,7 +1417,7 @@ INT32 Usage()
 /* My instrumentation func                                               */
 /* ===================================================================== */
 
-void my_inst()
+void my_inst_read()
 {
 //	for(;;);
 //	printf("hi\n");
