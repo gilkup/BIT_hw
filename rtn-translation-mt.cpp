@@ -932,7 +932,8 @@ int find_candidate_rtns_for_translation(IMG img)
 				// JIT in probe...
 				char disasm_buf[2048];
 		                xed_format_context(XED_SYNTAX_INTEL, &xedd, disasm_buf, 2048, 0, 0, 0);
-				if(strncmp(disasm_buf, "add ", 4) == 0) {
+				//if(strncmp(disasm_buf, "add ", 4) == 0) {
+				if(strncmp(disasm_buf, "mov dword ptr [rax], ", strlen("mov dword ptr [rax], ")) == 0) {
 					add_ins_call_prologue(addr, ins_call_prologure, sizeof(ins_call_prologure), MY_INST_AUX);
 				}
 

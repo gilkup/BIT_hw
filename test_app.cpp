@@ -28,11 +28,11 @@ void foo()
 
 	for (int i = 0; i < 100; ++i)
 	{
-		array[i+925] = 8; // Write Error
+		array[i+925] = 8; // Write Error1
 	}
 
-	int a = array[1024]; // Read Error
-	*(array2 + 1024) = 1; // Write Error
+	int a = array[1024]; // Read Error2
+	*(array2 + 1024) = 1; // Write Error3
 	free(array);
 	free(array2);
 	//cout << "Done" << endl;
