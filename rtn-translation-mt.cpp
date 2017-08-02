@@ -153,8 +153,8 @@ int translated_rtn_num = 0;
 // commit/uncommit thread-related variables:
 volatile bool enable_commit_uncommit_flag = false;
 
-unsigned char ins_call_prologure[] = {
-#include "ins_call.bin.parsed"
+unsigned char inst_reads_prologure[] = {
+#include "inst_reads.bin.parsed"
 };
 
 unsigned char my_inst_read_aux[] = {
@@ -393,20 +393,20 @@ int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, unsigned int size)
 
 
 /***************************/
-/* add_ins_call_prologue() */
+/* add_inst_reads_prologue() */
 /***************************/
-int add_ins_call_prologue(ADDRINT from, unsigned char* inst_buf_to_push, size_t inst_buf_size, enum my_real_dst_t call_target_type)
+int add_inst_reads_prologue(ADDRINT from, unsigned char* inst_buf_to_push, size_t inst_buf_size, enum my_real_dst_t call_target_type)
 {
-	unsigned int ins_call_prologure_idx = 0;
-	while(ins_call_prologure_idx < inst_buf_size) {
+	unsigned int inst_idx = 0;
+	while(inst_idx < inst_buf_size) {
 		xed_decoded_inst_t xedd;
 		xed_error_enum_t xed_code;							
           
 		xed_decoded_inst_zero_set_mode(&xedd,&dstate); 
 
-		xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(inst_buf_to_push + ins_call_prologure_idx), max_inst_len);
+		xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(inst_buf_to_push + inst_idx), max_inst_len);
 		if (xed_code != XED_ERROR_NONE) {
-			cerr << "ERROR: xed decode failed for instr at: " << "ins_call_prologure" << endl;
+			cerr << "ERROR: xed decode failed for instr at: " << "inst_reads_prologure" << endl;
 		}
 
 		unsigned int orig_size = xed_decoded_inst_get_length (&xedd);
@@ -438,7 +438,7 @@ int add_ins_call_prologue(ADDRINT from, unsigned char* inst_buf_to_push, size_t 
 
 		if(instr_map[num_of_instr_map_entries].category_enum == XED_CATEGORY_CALL) {
 		//	if(call_target_type == MY_INST_READ)
-		//		cerr << "11111111111111111111222222222222222: "<< ins_call_prologure_idx << endl;
+		//		cerr << "11111111111111111111222222222222222: "<< inst_idx << endl;
 			ADDRINT my_offset = 0xdeadbeef;
 			memcpy((void*)(instr_map[num_of_instr_map_entries].encoded_ins + 1), (void*)&my_offset, 4);
 			instr_map[num_of_instr_map_entries].my_real_dst = call_target_type;
@@ -460,7 +460,7 @@ int add_ins_call_prologue(ADDRINT from, unsigned char* inst_buf_to_push, size_t 
 			cerr << "    new instr:";
 			dump_instr_from_mem((ADDRINT *)instr_map[num_of_instr_map_entries-1].encoded_ins, instr_map[num_of_instr_map_entries-1].new_ins_addr);
 		}
-		ins_call_prologure_idx += orig_size;
+		inst_idx += orig_size;
 	}
 	//return new_size;
 	return 0;
@@ -880,7 +880,7 @@ int find_candidate_rtns_for_translation(IMG img)
 
 	// go over routines and check if they are candidates for translation and mark them for translation:
 
-	add_ins_call_prologue(0, my_inst_read_aux, sizeof(my_inst_read_aux), MY_INST_READ);
+	add_inst_reads_prologue(0, my_inst_read_aux, sizeof(my_inst_read_aux), MY_INST_READ);
 
 	for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec))
 	{   
@@ -932,7 +932,7 @@ int find_candidate_rtns_for_translation(IMG img)
 		                xed_format_context(XED_SYNTAX_INTEL, &xedd, disasm_buf, 2048, 0, 0, 0);
 				//if(strncmp(disasm_buf, "add ", 4) == 0) {
 				if(strncmp(disasm_buf, "mov dword ptr [rax], ", strlen("mov dword ptr [rax], ")) == 0) {
-					add_ins_call_prologue(addr, ins_call_prologure, sizeof(ins_call_prologure), MY_INST_READ_AUX);
+					add_inst_reads_prologue(addr, inst_reads_prologure, sizeof(inst_reads_prologure), MY_INST_READ_AUX);
 				}
 
 				// Add instr into instr map:
