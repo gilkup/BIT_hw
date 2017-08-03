@@ -1,8 +1,8 @@
 #!/bin/bash
 
-as inst_reads.S -o inst_reads.o
-objcopy -O binary inst_reads.o inst_reads.bin
-hexdump -v -e '"(unsigned char)0x" 1/1 "%02x" ","' inst_reads.bin > inst_reads.bin.parsed
+as inline_inst.S -o inline_inst.o
+objcopy -O binary inline_inst.o inline_inst.bin
+hexdump -v -e '"(unsigned char)0x" 1/1 "%02x" ","' inline_inst.bin > inline_inst.bin.parsed
 
 as my_inst_read_aux.S -o my_inst_read_aux.o
 objcopy -O binary my_inst_read_aux.o my_inst_read_aux.bin

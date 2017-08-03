@@ -153,8 +153,8 @@ int translated_rtn_num = 0;
 // commit/uncommit thread-related variables:
 volatile bool enable_commit_uncommit_flag = false;
 
-unsigned char inst_reads_prologure[] = {
-#include "inst_reads.bin.parsed"
+unsigned char g_inline_inst[] = {
+#include "inline_inst.bin.parsed"
 };
 
 unsigned char my_inst_read_aux[] = {
@@ -392,10 +392,10 @@ int add_new_instr_entry(xed_decoded_inst_t *xedd, ADDRINT pc, unsigned int size)
 }
 
 
-/***************************/
-/* add_inst_reads_prologue() */
-/***************************/
-int add_inst_reads_prologue(ADDRINT from, unsigned char* inst_buf_to_push, size_t inst_buf_size, enum my_real_dst_t call_target_type)
+/************************/
+/* push_inline_inst() */
+/************************/
+int push_inline_inst(ADDRINT from, unsigned char* inst_buf_to_push, size_t inst_buf_size, enum my_real_dst_t call_target_type)
 {
 	unsigned int inst_idx = 0;
 	while(inst_idx < inst_buf_size) {
@@ -880,7 +880,7 @@ int find_candidate_rtns_for_translation(IMG img)
 
 	// go over routines and check if they are candidates for translation and mark them for translation:
 
-	add_inst_reads_prologue(0, my_inst_read_aux, sizeof(my_inst_read_aux), MY_INST_READ);
+	push_inline_inst(0, my_inst_read_aux, sizeof(my_inst_read_aux), MY_INST_READ);
 
 	for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec))
 	{   
@@ -932,7 +932,7 @@ int find_candidate_rtns_for_translation(IMG img)
 		                xed_format_context(XED_SYNTAX_INTEL, &xedd, disasm_buf, 2048, 0, 0, 0);
 				//if(strncmp(disasm_buf, "add ", 4) == 0) {
 				if(strncmp(disasm_buf, "mov dword ptr [rax], ", strlen("mov dword ptr [rax], ")) == 0) {
-					add_inst_reads_prologue(addr, inst_reads_prologure, sizeof(inst_reads_prologure), MY_INST_READ_AUX);
+					push_inline_inst(addr, g_inline_inst, sizeof(g_inline_inst), MY_INST_READ_AUX);
 				}
 
 				// Add instr into instr map:
