@@ -437,8 +437,6 @@ int push_inline_inst(ADDRINT from, unsigned char* inst_buf_to_push, size_t inst_
 			instr_map[num_of_instr_map_entries].my_real_dst = IN_MY_INST_READ_AUX;
 
 		if(instr_map[num_of_instr_map_entries].category_enum == XED_CATEGORY_CALL) {
-		//	if(call_target_type == MY_INST_READ)
-		//		cerr << "11111111111111111111222222222222222: "<< inst_idx << endl;
 			ADDRINT my_offset = 0xdeadbeef;
 			memcpy((void*)(instr_map[num_of_instr_map_entries].encoded_ins + 1), (void*)&my_offset, 4);
 			instr_map[num_of_instr_map_entries].my_real_dst = call_target_type;
@@ -930,9 +928,16 @@ int find_candidate_rtns_for_translation(IMG img)
 				// JIT in probe...
 				char disasm_buf[2048];
 		                xed_format_context(XED_SYNTAX_INTEL, &xedd, disasm_buf, 2048, 0, 0, 0);
-				//if(strncmp(disasm_buf, "add ", 4) == 0) {
+				
 				if(strncmp(disasm_buf, "mov dword ptr [rax], ", strlen("mov dword ptr [rax], ")) == 0) {
 					push_inline_inst(addr, g_inline_inst, sizeof(g_inline_inst), MY_INST_READ_AUX);
+				}
+	
+				if(strncmp(disasm_buf, "mov ", strlen("mov ")) == 0) {
+					char *comma = strrchr(disasm_buf, ',');
+					if (comma && !strcmp(comma, ", dword ptr [rax]")) {
+						push_inline_inst(addr, g_inline_inst, sizeof(g_inline_inst), MY_INST_READ_AUX);
+					}
 				}
 
 				// Add instr into instr map:
