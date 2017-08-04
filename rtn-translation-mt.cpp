@@ -112,7 +112,10 @@ enum my_real_dst_t {NONE, // for instruction I don't touch
 			MY_INST_READ,	// target of the actual function
 			MY_INST_READ_AUX,	// target of the aux function that saves registers
 			IN_MY_INST_READ_AUX,	// members of the aux function, to be able to find the func
-			MY_MALLOC}; 
+			MY_INST_WRITE,	// target of the actual function
+			MY_INST_WRITE_AUX,	// target of the aux function that saves registers
+			IN_MY_INST_WRITE_AUX,	// members of the aux function, to be able to find the func
+			}; 
 
 // instruction map with an entry for each new instruction:
 typedef struct { 
@@ -162,6 +165,7 @@ unsigned char my_inst_read_aux[] = {
 };
 
 void my_inst_read();
+void my_inst_write();
 void* my_malloc (size_t size);
 void my_free (void* ptr);
 
@@ -437,6 +441,9 @@ int push_inline_inst(ADDRINT from, unsigned char* inst_buf_to_push, size_t inst_
 
 		if(call_target_type == MY_INST_READ)
 			instr_map[num_of_instr_map_entries].my_real_dst = IN_MY_INST_READ_AUX;
+
+		if(call_target_type == MY_INST_WRITE)
+			instr_map[num_of_instr_map_entries].my_real_dst = IN_MY_INST_WRITE_AUX;
 
 		if(instr_map[num_of_instr_map_entries].category_enum == XED_CATEGORY_CALL) {
 			ADDRINT my_offset = 0xdeadbeef;
@@ -848,6 +855,7 @@ int fix_instructions_Marina()
 	}
 
 	ADDRINT my_inst_read_aux_addr = 0;	// I assume this wrapper comes before all other code
+	ADDRINT my_inst_write_aux_addr = 0;	// I assume this wrapper comes before all other code
 
 	for (int i=0; i < num_of_instr_map_entries; i++) {
 		if(instr_map[i].my_real_dst == IN_MY_INST_READ_AUX) {
@@ -855,14 +863,30 @@ int fix_instructions_Marina()
 				my_inst_read_aux_addr = instr_map[i].new_ins_addr;
 		}
 
+		if(instr_map[i].my_real_dst == IN_MY_INST_WRITE_AUX) {
+			if(!my_inst_write_aux_addr)
+				my_inst_write_aux_addr = instr_map[i].new_ins_addr;
+		}
 
 		if(instr_map[i].my_real_dst == MY_INST_READ) {
 			volatile ADDRINT my_offset = (ADDRINT)my_inst_read - (instr_map[i].new_ins_addr + 5);
 			memcpy((void*)(instr_map[i].encoded_ins + 1), (void*)&my_offset, 4);
 		}
 
+		if(instr_map[i].my_real_dst == MY_INST_WRITE) {
+			volatile ADDRINT my_offset = (ADDRINT)my_inst_write - (instr_map[i].new_ins_addr + 5);
+			memcpy((void*)(instr_map[i].encoded_ins + 1), (void*)&my_offset, 4);
+		}
+
+
+
 		if(instr_map[i].my_real_dst == MY_INST_READ_AUX) {
 			volatile ADDRINT my_offset = my_inst_read_aux_addr - (instr_map[i].new_ins_addr + 5);
+			memcpy((void*)(instr_map[i].encoded_ins + 1), (void*)&my_offset, 4);
+		}
+
+		if(instr_map[i].my_real_dst == MY_INST_WRITE_AUX) {
+			volatile ADDRINT my_offset = my_inst_write_aux_addr - (instr_map[i].new_ins_addr + 5);
 			memcpy((void*)(instr_map[i].encoded_ins + 1), (void*)&my_offset, 4);
 		}
 	}
@@ -881,6 +905,7 @@ int find_candidate_rtns_for_translation(IMG img)
 	// go over routines and check if they are candidates for translation and mark them for translation:
 
 	push_inline_inst(0, my_inst_read_aux, sizeof(my_inst_read_aux), MY_INST_READ);
+	push_inline_inst(0, my_inst_read_aux, sizeof(my_inst_read_aux), MY_INST_WRITE);
 
 	for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec))
 	{   
@@ -932,7 +957,7 @@ int find_candidate_rtns_for_translation(IMG img)
 		                xed_format_context(XED_SYNTAX_INTEL, &xedd, disasm_buf, 2048, 0, 0, 0);
 				
 				if(strncmp(disasm_buf, "mov dword ptr [rax], ", strlen("mov dword ptr [rax], ")) == 0) {
-					push_inline_inst(addr, g_inline_inst, sizeof(g_inline_inst), MY_INST_READ_AUX);
+					push_inline_inst(addr, g_inline_inst, sizeof(g_inline_inst), MY_INST_WRITE_AUX);
 				}
 	
 				if(strncmp(disasm_buf, "mov ", strlen("mov ")) == 0) {
@@ -1483,7 +1508,16 @@ INT32 Usage()
 void my_inst_read()
 {
 //	for(;;);
-	printf("some error\n");
+	printf("read error\n");
+	exit(1);
+//	asm volatile ("ret");
+	return;
+}
+
+void my_inst_write()
+{
+//	for(;;);
+	printf("WRITE error\n");
 	exit(1);
 //	asm volatile ("ret");
 	return;
