@@ -164,8 +164,8 @@ unsigned char my_inst_read_aux[] = {
 #include "my_inst_read_aux.bin.parsed"
 };
 
-void my_inst_read();
-void my_inst_write();
+void my_inst_read(unsigned long addr);
+void my_inst_write(unsigned long addr);
 void* my_malloc (size_t size);
 void my_free (void* ptr);
 
@@ -1505,26 +1505,29 @@ INT32 Usage()
 /* My instrumentation func                                               */
 /* ===================================================================== */
 
-void my_inst_read()
+void my_inst_read(unsigned long addr)
 {
-//	for(;;);
-	printf("read error\n");
-	exit(1);
-//	asm volatile ("ret");
+	for (int i=0; i < num_of_instr_map_entries; i++) {
+		if(instr_map[i].new_ins_addr == addr) {
+			cout << "Memory read overflow at address: 0x" << hex << instr_map[i].orig_ins_addr << dec << endl;
+			break;
+		}
+	}
 	return;
 }
 
-void my_inst_write()
+void my_inst_write(unsigned long addr)
 {
-//	for(;;);
-	printf("WRITE error\n");
-	exit(1);
-//	asm volatile ("ret");
+	for (int i=0; i < num_of_instr_map_entries; i++) {
+		if(instr_map[i].new_ins_addr == addr) {
+			cout << "Memory write overflow at address: 0x" << hex << instr_map[i].orig_ins_addr << dec << endl;
+			break;
+		}
+	}
 	return;
 }
 
 void* my_malloc (size_t size) {
-	printf("MALLOOCCC!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 	char* res = (char*)malloc(size + 200);
 	for(int i = 0 ; i < 100 ; i++) {
 		res[i] = 0xaa;
@@ -1534,7 +1537,6 @@ void* my_malloc (size_t size) {
 }
 
 void my_free (void* ptr) {
-	printf("FFFFFFFFFFFFFFFFFRRRRRRRRRRRRRRRREEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE\n");
 	free((char*)ptr - 100);
 }
 
