@@ -1240,16 +1240,7 @@ void override_malloc_free()
 		else
 			continue;
 
-		//ADDRINT translated_rtn_addr = instr_map[translated_rtn[i].instr_map_entry].new_ins_addr;
-
-		// deal with the original instruction 1st
 		ADDRINT orig_rtn_addr = instr_map[translated_rtn[i].instr_map_entry].orig_ins_addr;
-		ADDRINT my_offset = (ADDRINT)my_malloc - orig_rtn_addr -5;
-		if(my_offset != (unsigned int)my_offset)
-			cerr << "66666666666666666666666666666" << endl;
-			cerr << my_offset << endl;
-			cerr << (unsigned int)my_offset << endl;
-
 		char *buffer = (char *)(orig_rtn_addr & (0xFFFFFFFFFFFFF000));
                 mprotect ((void *)buffer, pagesize * 2, PROT_READ | PROT_WRITE | PROT_EXEC);
 
@@ -1273,7 +1264,6 @@ void override_malloc_free()
 		cerr << hex << orig_rtn_addr << ": " << disasm_buf <<  endl;//asdasd
 
                 unsigned int size = xed_decoded_inst_get_length (&new_xedd);
-		cerr << "size = " << size << " displacement = " << xed_decoded_inst_get_memory_displacement(&new_xedd, 0) << endl;
 
 		ADDRINT addr_in_got = orig_rtn_addr + size + xed_decoded_inst_get_memory_displacement(&new_xedd, 0);
 		*(ADDRINT*)addr_in_got = new_target;
@@ -1494,18 +1484,24 @@ void my_inst_read()
 {
 //	for(;;);
 	printf("some error\n");
+	exit(1);
 //	asm volatile ("ret");
 	return;
 }
 
 void* my_malloc (size_t size) {
 	printf("MALLOOCCC!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-	return malloc(size);
+	char* res = (char*)malloc(size + 200);
+	for(int i = 0 ; i < 100 ; i++) {
+		res[i] = 0xaa;
+		res[100 + size + i] = 0xaa;
+	}
+	return res + 100;
 }
 
 void my_free (void* ptr) {
 	printf("FFFFFFFFFFFFFFFFFRRRRRRRRRRRRRRRREEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE\n");
-	free(ptr);
+	free((char*)ptr - 100);
 }
 
 
