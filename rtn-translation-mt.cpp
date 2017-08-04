@@ -162,7 +162,8 @@ unsigned char my_inst_read_aux[] = {
 };
 
 void my_inst_read();
-void my_malloc();
+void* my_malloc (size_t size);
+void my_free (void* ptr);
 
 /* ============================================================= */
 /* Service dump routines                                         */
@@ -1218,19 +1219,25 @@ void commit_translated_routines()
 	}
 }
 
-/*****************************/
-/* void commit_malloc_free() */
-/*****************************/
-void commit_malloc_free() 
+/*******************************/
+/* void override_malloc_free() */
+/*******************************/
+void override_malloc_free() 
 {
 	for (int i=0; i < translated_rtn_num; i++) {
 		RTN rtn = RTN_FindByAddress(translated_rtn[i].rtn_addr);
 		if (rtn == RTN_Invalid()) {
-			cerr << "commit_malloc_free: probing rtN: Unknown" << endl;
+			cerr << "override_malloc_free: probing rtN: Unknown" << endl;
 			continue;
 		}
 
-		if (strcmp(RTN_Name(rtn).c_str(), "malloc@plt") && strcmp(RTN_Name(rtn).c_str(), "free@plt"))
+		ADDRINT new_target;
+
+		if (strcmp(RTN_Name(rtn).c_str(), "malloc@plt") == 0)
+			new_target = (ADDRINT)my_malloc;
+		else if (strcmp(RTN_Name(rtn).c_str(), "free@plt") == 0)
+			new_target = (ADDRINT)my_free;
+		else
 			continue;
 
 		//ADDRINT translated_rtn_addr = instr_map[translated_rtn[i].instr_map_entry].new_ins_addr;
@@ -1269,19 +1276,7 @@ void commit_malloc_free()
 		cerr << "size = " << size << " displacement = " << xed_decoded_inst_get_memory_displacement(&new_xedd, 0) << endl;
 
 		ADDRINT addr_in_got = orig_rtn_addr + size + xed_decoded_inst_get_memory_displacement(&new_xedd, 0);
-		*(ADDRINT*)addr_in_got = (ADDRINT)my_malloc;
-//xed_int64_t xed_decoded_inst_get_memory_displacement	( 	const xed_decoded_inst_t * 	p,
-//unsigned int 	mem_idx
-//) 	
-
-
-
-//		*(char*)orig_rtn_addr = 0x68;
-//		memcpy((void*)(orig_rtn_addr + 1), (char*)&my_offset + 4, 4);
-//		*(char*)(orig_rtn_addr + 5) = 0x68;
-//		memcpy((void*)(orig_rtn_addr + 6), (char*)&my_offset + 0, 4);
-//		*(char*)(orig_rtn_addr + 10) = 0xc3;
-		//asdasd
+		*(ADDRINT*)addr_in_got = new_target;
 	}
 }
 
@@ -1451,7 +1446,7 @@ VOID ImageLoad(IMG img, VOID *v)
 	cout << "after Marina step" << endl;
 
 	// Step 4.2: make malloc@plt & free@plt constantly commited
-	commit_malloc_free();
+	override_malloc_free();
 	cout << "after Marina step2" << endl;
 
 
@@ -1503,9 +1498,14 @@ void my_inst_read()
 	return;
 }
 
-void my_malloc() {
-	printf("haha!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-	for(;;);
+void* my_malloc (size_t size) {
+	printf("MALLOOCCC!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+	return malloc(size);
+}
+
+void my_free (void* ptr) {
+	printf("FFFFFFFFFFFFFFFFFRRRRRRRRRRRRRRRREEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE\n");
+	free(ptr);
 }
 
 
