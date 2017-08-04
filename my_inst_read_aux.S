@@ -1,6 +1,6 @@
-	pushf
-	cmpl $0xaaaaaaaa, (%rax) 
-	jne out
+	#pushf
+	#cmpl $0xaaaaaaaa, (%rax) 
+	#jne out
 	
 	push   %rbp
 	mov    %rsp,%rbp
@@ -29,6 +29,6 @@ lbl:	call lbl
 	pop    %rdi
 	leave
 	
-out:	popf
+out:	#popf
 	
 	ret
