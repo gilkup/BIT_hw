@@ -1020,9 +1020,8 @@ int copy_instrs_to_tc()
 /***************************/
 /* void safe_code_update() */
 /***************************/
-int safe_code_update(ADDRINT addr, volatile char *bytes, unsigned int size, int is_code_write_protected)
+int safe_code_update(ADDRINT addr, char *bytes, unsigned int size, int is_code_write_protected)
 {
-
 	if (is_code_write_protected) {
 		char *buffer = (char *)(addr & (0xFFFFFFFFFFFFF000));                    
 		int rc = mprotect ((void *)buffer, pagesize, PROT_READ | PROT_WRITE | PROT_EXEC);
@@ -1030,33 +1029,39 @@ int safe_code_update(ADDRINT addr, volatile char *bytes, unsigned int size, int 
 			perror ("mprotect");
 			return -1;
 		}
+	
+		// check if the instr crosses a page:
+		if (((addr + size) & 0x00000000000F000) != (addr & 0x00000000000F000)) {
+			//cerr << "found page crossing at 0x:" << hex << addr << endl;
+			char *buffer = (char *)((addr + size)& (0xFFFFFFFFFFFFF000));
+			int rc = mprotect ((void *)buffer, pagesize, PROT_READ | PROT_WRITE | PROT_EXEC);
+			if (rc < 0) {
+				perror ("mprotect");
+				return -1;
+			}
+		}
 	}
-//	asm volatile("mfence");
 
 	if (size <= 8)  { // update can be done with a single atomic store instr:
 		memcpy((char *)addr, (char *)bytes, size);
-		asm volatile("mfence");
 		return 0;
 	}
 
 	//1st stage: insert jmp to itself.
-	*(ADDRINT *)addr = JMP_TO_ITSELF_OFFFSET_OPCODE;
-	asm volatile("mfence");
+	*(ADDRINT *)addr = JMP_TO_ITSELF_OFFFSET_OPCODE;	
 
 	//2nd stage: restore the rest of the bytes after the 1st 8 bytes:
 	memcpy((char *)(addr + SIZE_OF_JMP_TO_ITSELF_OPCODE),   
-		(char *)(bytes + SIZE_OF_JMP_TO_ITSELF_OPCODE), 
-		size - SIZE_OF_JMP_TO_ITSELF_OPCODE);
-	asm volatile("mfence");
+	(char *)(bytes + SIZE_OF_JMP_TO_ITSELF_OPCODE), 
+
+	size - SIZE_OF_JMP_TO_ITSELF_OPCODE);
 
 	//3rd stage: restore the 1st 8 bytes from original code from the probing code:
 	memcpy((char *)addr, (char *)bytes, SIZE_OF_JMP_TO_ITSELF_OPCODE);
-	asm volatile("mfence");
-
 	return 0;
+
 }		
-
-
+		
 /***************************/
 /* int insert_probe_jump() */
 /***************************/
@@ -1416,6 +1421,7 @@ VOID ImageLoad(IMG img, VOID *v)
 	// debug print of all images' instructions
 	//dump_all_image_instrs(img);
 
+	asm volatile("mfence");
 	// Step 0: Check that the image is of the main executable file:
 	if (!IMG_IsMainExecutable(img))
 		return;
