@@ -1309,7 +1309,8 @@ void commit_uncommit_translated_routines(void *v)
 {
 	while (!enable_commit_uncommit_flag);
 	asm volatile("mfence");
-	
+	sleep(1);
+
 	while (true) {
 		cerr << "before commit translated routines" << endl;
 
@@ -1491,6 +1492,7 @@ VOID ImageLoad(IMG img, VOID *v)
 	//         applyng the commit-uncommit routines alternatingly:
 	asm volatile("mfence");
 	enable_commit_uncommit_flag = true;    
+	asm volatile("mfence");
 }
 
 
