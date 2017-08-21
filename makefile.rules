@@ -17,7 +17,7 @@
 # This defines tests which run tools of the same name.  This is simply for convenience to avoid
 # defining the test name twice (once in TOOL_ROOTS and again in TEST_ROOTS).
 # Tests defined here should not be defined in TOOL_ROOTS and TEST_ROOTS.
-TEST_TOOL_ROOTS := rtn-translation-mt
+TEST_TOOL_ROOTS := project
 
 # This defines the tests to be run that were not already defined in TEST_TOOL_ROOTS.
 TEST_ROOTS :=
@@ -98,7 +98,15 @@ $(OBJDIR)AllocData$(OBJ_SUFFIX): AllocData.cpp
 $(OBJDIR)handler_wrappers$(OBJ_SUFFIX): handler_wrappers.S
 	as handler_wrappers.S -o $(OBJDIR)handler_wrappers$(OBJ_SUFFIX)
 
+my_bins.h:
+	as inline_inst.S -o inline_inst.o
+	objcopy -O binary inline_inst.o inline_inst.bin
+	hexdump -v -e '"(unsigned char)0x" 1/1 "%02x" ","' inline_inst.bin > inline_inst.bin.parsed
+	as my_inst_read_aux.S -o my_inst_read_aux.o
+	objcopy -O binary my_inst_read_aux.o my_inst_read_aux.bin
+	hexdump -v -e '"(unsigned char)0x" 1/1 "%02x" ","' my_inst_read_aux.bin > my_inst_read_aux.bin.parsed
+
 # Build the tool as a dll (shared object).
-#$(OBJDIR)$(TEST_TOOL_ROOTS)$(PINTOOL_SUFFIX): $(OBJDIR)$(TEST_TOOL_ROOTS)$(OBJ_SUFFIX) $(OBJDIR)handler_wrappers$(OBJ_SUFFIX)
+$(OBJDIR)$(TEST_TOOL_ROOTS)$(PINTOOL_SUFFIX): my_bins.h $(OBJDIR)$(TEST_TOOL_ROOTS)$(OBJ_SUFFIX)
 	$(LINKER) $(TOOL_LDFLAGS_NOOPT) $(LINK_EXE)$@ $(^:%.h=) $(TOOL_LPATHS) $(TOOL_LIBS)
 
