@@ -17,7 +17,7 @@
 # This defines tests which run tools of the same name.  This is simply for convenience to avoid
 # defining the test name twice (once in TOOL_ROOTS and again in TEST_ROOTS).
 # Tests defined here should not be defined in TOOL_ROOTS and TEST_ROOTS.
-TEST_TOOL_ROOTS := ex3
+TEST_TOOL_ROOTS := project
 
 # This defines the tests to be run that were not already defined in TEST_TOOL_ROOTS.
 TEST_ROOTS :=
@@ -72,3 +72,39 @@ SANITY_SUBSET := $(TEST_TOOL_ROOTS) $(TEST_ROOTS)
 
 # This section contains the build rules for all binaries that have special build rules.
 # See makefile.default.rules for the default build rules.
+
+
+###### Special applications' build rules ######
+
+TOOL_CXXFLAGS := $(TOOL_CXXFLAGS) -std=c++11
+$(OBJDIR)divide_by_zero$(EXE_SUFFIX): divide_by_zero_$(OS_TYPE).c
+	$(APP_CC) $(APP_CXXFLAGS_NOOPT) $(COMP_EXE)$@ $< $(APP_LDFLAGS_NOOPT) $(APP_LIBS)
+
+$(OBJDIR)thread_app$(EXE_SUFFIX): thread_$(OS_TYPE).c
+	$(APP_CC) $(APP_CXXFLAGS) $(COMP_EXE)$@ $< $(APP_LDFLAGS) $(APP_LIBS)
+	
+# Build the intermediate object file.
+$(OBJDIR)my_malloc_trace$(OBJ_SUFFIX): my_malloc_trace.cpp
+	$(CXX) $(TOOL_CXXFLAGS) $(COMP_OBJ)$@ $<
+
+# Build the intermediate object file.
+$(OBJDIR)Tracer$(OBJ_SUFFIX): Tracer.cpp AllocData.cpp
+	$(CXX) $(TOOL_CXXFLAGS) $(COMP_OBJ)$@ $<
+
+# Build the intermediate object file.
+$(OBJDIR)AllocData$(OBJ_SUFFIX): AllocData.cpp
+	$(CXX) $(TOOL_CXXFLAGS) $(COMP_OBJ)$@ $<
+
+$(OBJDIR)handler_wrappers$(OBJ_SUFFIX): handler_wrappers.S
+	as handler_wrappers.S -o $(OBJDIR)handler_wrappers$(OBJ_SUFFIX)
+
+# Build the tool as a dll (shared object).
+$(OBJDIR)$(TEST_TOOL_ROOTS)$(PINTOOL_SUFFIX): $(OBJDIR)$(TEST_TOOL_ROOTS)$(OBJ_SUFFIX)
+	as inline_inst.S -o inline_inst.o
+	objcopy -O binary inline_inst.o inline_inst.bin
+	hexdump -v -e '"(unsigned char)0x" 1/1 "%02x" ","' inline_inst.bin > inline_inst.bin.parsed
+	as my_inst_read_aux.S -o my_inst_read_aux.o
+	objcopy -O binary my_inst_read_aux.o my_inst_read_aux.bin
+	hexdump -v -e '"(unsigned char)0x" 1/1 "%02x" ","' my_inst_read_aux.bin > my_inst_read_aux.bin.parsed
+	$(LINKER) $(TOOL_LDFLAGS_NOOPT) $(LINK_EXE)$@ $(^:%.h=) $(TOOL_LPATHS) $(TOOL_LIBS)
+
