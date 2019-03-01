@@ -1,5 +1,5 @@
-Marina Minkin 307659318
-Gil Kupfer 201112919
+Marina Minkin
+Gil Kupfer
 
 compile:
 In the directory of the pintool:
